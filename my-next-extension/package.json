@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
-  },
+  "dev": "next dev",
+  "build": "next build && mv out/_next out/next && sed -i '' 's/_next/next/g' out/**.html && rm -rf out/_* out/__* && node scripts/generate-csp.js",
+  "start": "next start",
+  "lint": "next lint"
+},
   "dependencies": {
     "next": "16.1.1",
     "react": "19.2.3",
