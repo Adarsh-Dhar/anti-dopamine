@@ -5,5 +5,8 @@
   "action": {
     "default_popup": "index.html", 
     "default_title": "Open Next.js App"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self';"
   }
 }

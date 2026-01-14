@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
   "dev": "next dev",
-  "build": "next build && mv out/_next out/next && sed -i '' 's/_next/next/g' out/**.html && rm -rf out/_* out/__* && node scripts/generate-csp.js",
+  "build": "next build && mv out/_next out/next && sed -i '' 's/_next/next/g' out/**.html && rm -rf out/_* out/__* && node scripts/extractor-inline.js",
   "start": "next start",
   "lint": "next lint"
 },
