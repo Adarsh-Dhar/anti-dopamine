@@ -1,49 +1,55 @@
 
-import { useState } from 'react';
-import './App.css';
+import React, { useState, useEffect } from 'react';
 
 function App() {
-  const [status, setStatus] = useState('');
+  const [metrics, setMetrics] = useState({ saturation: 0, motion: 0, loudness: 0 });
+  const [error, setError] = useState(null);
 
-  const handleStartTracking = async () => {
-    setStatus('Initializing...');
+  const startTracking = async () => {
+    setError(null);
     try {
-      // 1. Get the current active tab
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-      if (!tab?.id) {
-        setStatus('Error: No active tab found.');
-        return;
-      }
-
-      // 2. Check if we are on a valid URL (optional but good practice)
-      if (!tab.url.includes('youtube.com')) {
-        setStatus('Please navigate to YouTube first.');
-        return;
-      }
-
-      console.log(`Sending START_TRACKING for tab ${tab.id}`);
-
-      // 3. Send the message to background.js
-      await chrome.runtime.sendMessage({
-        type: 'START_TRACKING',
-        tabId: tab.id
-      });
-
-      setStatus('Tracking command sent! Check Service Worker console.');
-    } catch (error) {
-      console.error('Popup Error:', error);
-      setStatus('Error: ' + error.message);
+      chrome.runtime.sendMessage({ type: 'START_TRACKING', tabId: tab.id });
+    } catch (e) {
+      setError("Failed to connect.");
     }
   };
 
+  useEffect(() => {
+    const listener = (msg) => {
+      if (msg.type === "METRICS_UPDATE") {
+        setMetrics(msg.data);
+      } else if (msg.type === "TRACKING_ERROR") {
+        setError(msg.message);
+      }
+    };
+    chrome.runtime.onMessage.addListener(listener);
+    return () => chrome.runtime.onMessage.removeListener(listener);
+  }, []);
+
   return (
-    <div className="extension-container">
-      <h1>Video Tracker</h1>
-      <button onClick={handleStartTracking}>
-        Start Tracking Video
+    <div style={{ padding: 20, width: 300, fontFamily: 'sans-serif' }}>
+      <h1>Anti-Dopamine</h1>
+      
+      {error ? (
+        <div style={{ background: '#ffebee', color: '#c62828', padding: 10, borderRadius: 5, marginBottom: 10 }}>
+          <strong>Error:</strong> {error}
+        </div>
+      ) : null}
+
+      <button 
+        onClick={startTracking}
+        style={{ padding: '10px 20px', background: 'blue', color: 'white', border: 'none', borderRadius: 5, cursor: 'pointer' }}
+      >
+        Start Tracking
       </button>
-      {status && <p className="message">{status}</p>}
+
+      <div style={{ marginTop: 20, background: '#f5f5f5', padding: 15, borderRadius: 10, color: 'black' }}>
+        <h3>Live Metrics</h3>
+        <p>🎨 Saturation: <strong>{(metrics.saturation * 100).toFixed(0)}%</strong></p>
+        <p>🏃 Motion: <strong>{(metrics.motion * 100).toFixed(0)}%</strong></p>
+        <p>🔊 Loudness: <strong>{metrics.loudness.toFixed(0)}</strong></p>
+      </div>
     </div>
   );
 }

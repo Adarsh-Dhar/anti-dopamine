@@ -1,42 +1,162 @@
-// offscreen.js
-let canvas, ctx, videoElement;
+// Clean, single implementation for live tab streaming and metrics
+let videoElement = null;
+let canvas = null;
+let ctx = null;
+let audioCtx = null;
+let analyser = null;
+let previousPixelData = null;
+let analysisInterval = null;
 
 chrome.runtime.onMessage.addListener(async (msg) => {
-  if (msg.type === 'START_ANALYSIS') {
-    const { streamId, coords } = msg.data;
+  if (msg.type === 'START_STREAM_ANALYSIS') {
+    const { streamId } = msg.data;
     try {
-      await startStream(streamId, coords);
+      await startLiveStream(streamId);
     } catch (err) {
       console.error('[Offscreen] Error starting stream:', err);
     }
-  } else {
-    console.warn('[Offscreen] Unknown message type:', msg.type, msg);
   }
 });
 
-let audioCtx, analyser;
-
-chrome.runtime.onMessage.addListener(async (msg) => {
-  if (msg.type === 'INIT_AUDIO') {
-    const { streamId } = msg.data;
-    try {
-      await startAudioStream(streamId);
-    } catch (err) {
-      console.error('[Offscreen] Error starting audio stream:', err);
-    }
-  } else if (msg.type === 'PROCESS_FRAME') {
-    const { image, timestamp } = msg.data;
-    try {
-      await processFrame(image, timestamp);
-    } catch (err) {
-      console.error('[Offscreen] Error processing frame:', err);
-    }
-  } else {
-    console.warn('[Offscreen] Unknown message type:', msg.type, msg);
+async function startLiveStream(streamId) {
+  // Cleanup old streams/intervals
+  if (videoElement) {
+    videoElement.srcObject?.getTracks().forEach(t => t.stop());
+    videoElement.remove();
   }
-});
+  if (analysisInterval) clearInterval(analysisInterval);
 
-async function startAudioStream(streamId) {
+  // Get the Live Tab Stream (Video + Audio)
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      mandatory: {
+        chromeMediaSource: 'tab',
+        chromeMediaSourceId: streamId
+      }
+    },
+    video: {
+      mandatory: {
+        chromeMediaSource: 'tab',
+        chromeMediaSourceId: streamId,
+        maxWidth: 640,
+        maxHeight: 360,
+        maxFrameRate: 30
+      }
+    }
+  });
+
+  console.log('[Offscreen] Live stream connected. Stream tracks:', stream.getTracks().map(t => t.kind));
+
+  // Play stream in hidden video element
+  videoElement = document.createElement('video');
+  videoElement.srcObject = stream;
+  videoElement.muted = true;
+  videoElement.autoplay = true;
+  videoElement.playsInline = true;
+  videoElement.addEventListener('loadedmetadata', () => {
+    console.log('[Offscreen] Video loadedmetadata:', videoElement.videoWidth, videoElement.videoHeight);
+  });
+  videoElement.addEventListener('play', () => {
+    console.log('[Offscreen] Video play event. ReadyState:', videoElement.readyState);
+  });
+  videoElement.addEventListener('error', (e) => {
+    console.error('[Offscreen] Video error:', e);
+  });
+  videoElement.play().then(() => {
+    console.log('[Offscreen] videoElement.play() promise resolved.');
+  }).catch(e => {
+    console.error('[Offscreen] videoElement.play() error:', e);
+  });
+
+  // Setup Audio Analysis
+  audioCtx = new AudioContext();
+  const source = audioCtx.createMediaStreamSource(stream);
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 256;
+  source.connect(analyser);
+  // Do NOT connect to destination (no audio output)
+
+  // Setup OffscreenCanvas for Pixel Reading
+  canvas = new OffscreenCanvas(100, 100);
+  ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+  // Start Analysis Loop
+  analysisInterval = setInterval(analyzeCurrentFrame, 500);
+  console.log('[Offscreen] Analysis loop started.');
+}
+
+function analyzeCurrentFrame() {
+
+  if (!videoElement) {
+    console.warn('[Offscreen] No videoElement in analyzeCurrentFrame');
+    return;
+  }
+  if (videoElement.readyState < 2) {
+    console.warn('[Offscreen] Video not ready. readyState:', videoElement.readyState);
+    return;
+  }
+  // Draw Video Frame to Canvas
+  try {
+    ctx.drawImage(videoElement, 0, 0, 100, 100);
+  } catch (e) {
+    console.error('[Offscreen] drawImage error:', e);
+    return;
+  }
+  const frameData = ctx.getImageData(0, 0, 100, 100).data;
+  // Log some pixel data for debugging
+  if (frameData.length > 0) {
+    console.log('[Offscreen] Frame data sample:', frameData[0], frameData[1], frameData[2]);
+  }
+
+  // Calculate Saturation
+  let totalSaturation = 0;
+  let pixels = 0;
+  for (let i = 0; i < frameData.length; i += 40) {
+    const r = frameData[i];
+    const g = frameData[i + 1];
+    const b = frameData[i + 2];
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    if (max > 0) totalSaturation += (max - min) / max;
+    pixels++;
+  }
+  const avgSaturation = pixels > 0 ? totalSaturation / pixels : 0;
+
+  // Calculate Motion
+  let motionScore = 0;
+  if (previousPixelData) {
+    let diffSum = 0;
+    for (let i = 0; i < frameData.length; i += 40) {
+      const rDiff = Math.abs(frameData[i] - previousPixelData[i]);
+      const gDiff = Math.abs(frameData[i+1] - previousPixelData[i+1]);
+      const bDiff = Math.abs(frameData[i+2] - previousPixelData[i+2]);
+      diffSum += (rDiff + gDiff + bDiff) / 3;
+    }
+    motionScore = (diffSum / pixels) / 255;
+  }
+  previousPixelData = Uint8ClampedArray.from(frameData);
+
+  // Calculate Loudness
+  let volume = 0;
+  if (analyser) {
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(dataArray);
+    const sum = dataArray.reduce((a, b) => a + b, 0);
+    volume = sum / dataArray.length;
+  }
+
+  // Send Data
+  const timestamp = Date.now();
+  chrome.runtime.sendMessage({
+    type: 'METRICS_UPDATE',
+    data: {
+      saturation: avgSaturation,
+      motion: motionScore,
+      loudness: volume,
+      timestamp
+    }
+  });
+}
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
@@ -90,6 +210,7 @@ async function processFrame(image, timestamp) {
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
   const frameData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
   let totalSaturation = 0;
+  let pixels = 0;
   for (let i = 0; i < frameData.length; i += 40) {
     const r = frameData[i];
     const g = frameData[i + 1];
@@ -97,8 +218,24 @@ async function processFrame(image, timestamp) {
     const max = Math.max(r, g, b);
     const min = Math.min(r, g, b);
     if (max > 0) totalSaturation += (max - min) / max;
+    pixels++;
   }
-  const avgSaturation = totalSaturation / (frameData.length / 40);
+  const avgSaturation = pixels > 0 ? totalSaturation / pixels : 0;
+
+  // Motion detection (Pixel Diff)
+  let motionScore = 0;
+  if (previousPixelData) {
+    let diffSum = 0;
+    for (let i = 0; i < frameData.length; i += 40) {
+      const rDiff = Math.abs(frameData[i] - previousPixelData[i]);
+      const gDiff = Math.abs(frameData[i+1] - previousPixelData[i+1]);
+      const bDiff = Math.abs(frameData[i+2] - previousPixelData[i+2]);
+      diffSum += (rDiff + gDiff + bDiff) / 3;
+    }
+    motionScore = (diffSum / pixels) / 255;
+  }
+  previousPixelData = Uint8ClampedArray.from(frameData);
+
   // --- AUDIO METRICS ---
   let volume = 0;
   if (analyser) {
@@ -110,6 +247,7 @@ async function processFrame(image, timestamp) {
     type: "METRICS_UPDATE",
     data: {
       saturation: avgSaturation,
+      motion: motionScore,
       loudness: volume,
       timestamp
     }
