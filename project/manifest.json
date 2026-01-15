@@ -7,5 +7,28 @@
     "default_popup": "index.html",
     "default_title": "Hello World Extension"
   },
-  "permissions": []
+  "permissions": [
+    "tabCapture",
+    "offscreen",
+    "scripting",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["offscreen.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }
