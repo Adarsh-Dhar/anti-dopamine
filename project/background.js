@@ -47,4 +47,4 @@ chrome.runtime.onMessage.addListener(async (msg, sender) => {
     }
   }
 });
-// ...existing code ends here. Remove all code after the main message handler above, as it is obsolete and causes syntax errors.
+
