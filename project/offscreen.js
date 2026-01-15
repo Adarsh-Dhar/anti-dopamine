@@ -4,26 +4,42 @@ let canvas, ctx, videoElement;
 chrome.runtime.onMessage.addListener(async (msg) => {
   if (msg.type === 'START_ANALYSIS') {
     const { streamId, coords } = msg.data;
-    startStream(streamId, coords);
+    try {
+      await startStream(streamId, coords);
+    } catch (err) {
+      console.error('[Offscreen] Error starting stream:', err);
+    }
+  } else {
+    console.warn('[Offscreen] Unknown message type:', msg.type, msg);
   }
 });
 
 async function startStream(streamId, coords) {
   // 1. Get the media stream from the ID
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      mandatory: {
-        chromeMediaSource: "tab",
-        chromeMediaSourceId: streamId
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        mandatory: {
+          chromeMediaSource: "tab",
+          chromeMediaSourceId: streamId
+        }
+      },
+      video: {
+        mandatory: {
+          chromeMediaSource: "tab",
+          chromeMediaSourceId: streamId
+        }
       }
-    },
-    video: {
-      mandatory: {
-        chromeMediaSource: "tab",
-        chromeMediaSourceId: streamId
-      }
-    }
-  });
+    });
+  } catch (err) {
+    console.error('[Offscreen] Error getting user media:', err);
+    throw err;
+  }
+  	if (!stream) {
+  		console.error('[Offscreen] No stream obtained!');
+  		return;
+  	}
 
   // 2. Fix the "Mute" bug: Route audio back to speakers
   const audioCtx = new AudioContext();
