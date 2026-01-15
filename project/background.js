@@ -18,8 +18,8 @@ chrome.runtime.onMessage.addListener(async (msg, sender) => {
     try {
       // 1. Get the Media Stream ID
       // This ID grants access to BOTH Audio and Video of the tab
+      // FIX: Removed 'consumerTabId'. Now the offscreen document can access it!
       const streamId = await chrome.tabCapture.getMediaStreamId({ 
-        consumerTabId: tabId,
         targetTabId: tabId 
       });
       console.log("[Background] Got Stream ID:", streamId);

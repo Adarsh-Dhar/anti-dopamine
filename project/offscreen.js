@@ -1,4 +1,4 @@
-// Clean, single implementation for live tab streaming and metrics
+// Clean implementation for live tab streaming and metrics
 let videoElement = null;
 let canvas = null;
 let ctx = null;
@@ -14,6 +14,11 @@ chrome.runtime.onMessage.addListener(async (msg) => {
       await startLiveStream(streamId);
     } catch (err) {
       console.error('[Offscreen] Error starting stream:', err);
+      // Report error to Popup
+      chrome.runtime.sendMessage({
+        type: 'TRACKING_ERROR',
+        message: 'Stream Access Denied. See offscreen console.'
+      });
     }
   }
 });
@@ -45,20 +50,84 @@ async function startLiveStream(streamId) {
     }
   });
 
-  console.log('[Offscreen] Live stream connected. Stream tracks:', stream.getTracks().map(t => t.kind));
+  console.log('[Offscreen] Live stream connected.');
 
   // Play stream in hidden video element
   videoElement = document.createElement('video');
   videoElement.srcObject = stream;
   videoElement.muted = true;
-  videoElement.autoplay = true;
-  videoElement.playsInline = true;
-  videoElement.addEventListener('loadedmetadata', () => {
-    console.log('[Offscreen] Video loadedmetadata:', videoElement.videoWidth, videoElement.videoHeight);
+  videoElement.play();
+
+  // Setup Audio Analysis
+  audioCtx = new AudioContext();
+  const source = audioCtx.createMediaStreamSource(stream);
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 256;
+  source.connect(analyser);
+
+  // Setup Canvas for Pixel Reading
+  canvas = new OffscreenCanvas(100, 100);
+  ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+  // Start Analysis Loop
+  analysisInterval = setInterval(analyzeCurrentFrame, 500);
+}
+
+function analyzeCurrentFrame() {
+  if (!videoElement || videoElement.readyState < 2) return;
+
+  // Draw Video Frame to Canvas
+  ctx.drawImage(videoElement, 0, 0, 100, 100);
+  const frameData = ctx.getImageData(0, 0, 100, 100).data;
+
+  // Calculate Saturation
+  let totalSaturation = 0;
+  let pixels = 0;
+  for (let i = 0; i < frameData.length; i += 40) { 
+    const r = frameData[i];
+    const g = frameData[i + 1];
+    const b = frameData[i + 2];
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    if (max > 0) totalSaturation += (max - min) / max;
+    pixels++;
+  }
+  const avgSaturation = pixels > 0 ? totalSaturation / pixels : 0;
+
+  // Calculate Motion
+  let motionScore = 0;
+  if (previousPixelData) {
+    let diffSum = 0;
+    for (let i = 0; i < frameData.length; i += 40) {
+      const rDiff = Math.abs(frameData[i] - previousPixelData[i]);
+      const gDiff = Math.abs(frameData[i+1] - previousPixelData[i+1]);
+      const bDiff = Math.abs(frameData[i+2] - previousPixelData[i+2]);
+      diffSum += (rDiff + gDiff + bDiff) / 3;
+    }
+    motionScore = (diffSum / pixels) / 255;
+  }
+  previousPixelData = Uint8ClampedArray.from(frameData);
+
+  // Calculate Loudness
+  let volume = 0;
+  if (analyser) {
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(dataArray);
+    const sum = dataArray.reduce((a, b) => a + b, 0);
+    volume = sum / dataArray.length;
+  }
+
+  // Send Data
+  chrome.runtime.sendMessage({
+    type: "METRICS_UPDATE",
+    data: {
+      saturation: avgSaturation,
+      motion: motionScore,
+      loudness: volume,
+      timestamp: Date.now()
+    }
   });
-  videoElement.addEventListener('play', () => {
-    console.log('[Offscreen] Video play event. ReadyState:', videoElement.readyState);
-  });
+}
   videoElement.addEventListener('error', (e) => {
     console.error('[Offscreen] Video error:', e);
   });
@@ -83,7 +152,6 @@ async function startLiveStream(streamId) {
   // Start Analysis Loop
   analysisInterval = setInterval(analyzeCurrentFrame, 500);
   console.log('[Offscreen] Analysis loop started.');
-}
 
 function analyzeCurrentFrame() {
 
@@ -177,12 +245,11 @@ function analyzeCurrentFrame() {
     return;
   }
   audioCtx = new AudioContext();
-  const source = audioCtx.createMediaStreamSource(stream);
+  const audioSource = audioCtx.createMediaStreamSource(stream);
   analyser = audioCtx.createAnalyser();
   analyser.fftSize = 256;
-  source.connect(analyser);
+  audioSource.connect(analyser);
   analyser.connect(audioCtx.destination);
-}
 
 async function processFrame(image, timestamp) {
   // Create or get canvas
@@ -285,10 +352,10 @@ async function startStream(streamId, coords) {
 
   // 2. Fix the "Mute" bug: Route audio back to speakers
   const audioCtx = new AudioContext();
-  const source = audioCtx.createMediaStreamSource(stream);
+  const audioSource = audioCtx.createMediaStreamSource(stream);
   const analyser = audioCtx.createAnalyser();
   analyser.fftSize = 256;
-  source.connect(analyser);
+  audioSource.connect(analyser);
   analyser.connect(audioCtx.destination); // Plays audio to user
 
   // 3. Setup Video for Visual Analysis
