@@ -1,13 +1,12 @@
 'use client'; // Required for buttons/hooks in App Router
 
+import { useState } from "react";
+
 export default function Popup() {
-  
+  const [message, setMessage] = useState("");
+
   const handleLog = () => {
-    // 1. Logs to the popup's isolated console
-    console.log("Hello World from Next.js!");
-    
-    // 2. Alert to verify it works visually
-    alert("Hello World!");
+    setMessage("Hello World from Next.js!");
   };
 
   return (
@@ -20,8 +19,13 @@ export default function Popup() {
         onClick={handleLog}
         className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
       >
-        Log Hello World
+        Show Hello World
       </button>
+      {message && (
+        <div className="mt-4 p-2 bg-gray-100 rounded text-blue-700 text-center w-full">
+          {message}
+        </div>
+      )}
     </div>
   );
 }

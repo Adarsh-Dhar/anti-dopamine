@@ -14,41 +14,46 @@ try {
   }
   let html = fs.readFileSync(HTML_FILE, 'utf-8');
 
-  // 2. Find and extract inline scripts
-  // We match <script> tags that do NOT have a 'src' attribute and are NOT JSON data
+  // -----------------------------------------------------------------------
+  // CRITICAL FIX: Remove 'async' and 'defer' from ALL scripts
+  // This ensures React loads synchronously and hydrates the button immediately.
+  // -----------------------------------------------------------------------
+  html = html.replace(/<script[^>]+>/g, (tag) => {
+    return tag.replace(/\s(async|defer)/g, '');
+  });
+  console.log('✅ Removed async/defer from scripts to ensure execution order.');
+
+  // 2. Extract inline scripts
   const scriptRegex = /<script\b([^>]*)>([\s\S]*?)<\/script>/gm;
   let scriptCount = 0;
 
   html = html.replace(scriptRegex, (match, attributes, content) => {
-    // Skip if it already has a source
+    // Skip if it has a src (external file)
     if (attributes.includes('src=')) return match;
     
-    // Skip if it's JSON data (Next.js uses this for props)
+    // Skip JSON data (Next.js props)
     if (attributes.includes('type="application/json"') || attributes.includes("type='application/json'")) return match;
 
-    // Skip empty scripts
+    // Skip empty
     if (!content.trim()) return match;
 
-    // Generate a unique filename for this script
     const filename = `script-${crypto.randomBytes(4).toString('hex')}.js`;
     const filePath = path.join(OUT_DIR, filename);
 
-    // Write the content to a new file
     fs.writeFileSync(filePath, content);
     scriptCount++;
 
-    // Replace the inline script with a link to the new file
-    // We keep original attributes (like async/defer) just in case
-    return `<script src="${filename}"${attributes}></script>`;
+    // Return the new script tag (without async/defer)
+    const cleanAttributes = attributes.replace(/\s(async|defer)/g, '');
+    return `<script src="${filename}"${cleanAttributes}></script>`;
   });
 
   console.log(`✅ Extracted ${scriptCount} inline scripts to external files.`);
 
-  // 3. Save the modified HTML
+  // 3. Save HTML
   fs.writeFileSync(HTML_FILE, html);
 
-  // 4. Update manifest.json
-  // Now we only need to allow 'self'. No hashes needed!
+  // 4. Update Manifest
   if (fs.existsSync(MANIFEST_FILE)) {
     const manifest = JSON.parse(fs.readFileSync(MANIFEST_FILE, 'utf-8'));
     
@@ -61,6 +66,6 @@ try {
   }
 
 } catch (e) {
-  console.error('❌ Failed to extract scripts:', e);
+  console.error('❌ Failed:', e);
   process.exit(1);
 }
