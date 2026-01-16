@@ -1,13 +1,21 @@
+
 .extension-container {
-  width: 300px;
+  width: 100%;        /* Fill the body width (360px) */
+  height: 100%;       /* Fill the body height */
   padding: 20px;
+  box-sizing: border-box; /* Ensures padding doesn't break width */
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start; /* Start from top */
 }
 
 .extension-container h1 {
   font-size: 1.5em;
   margin-bottom: 20px;
 }
+
 
 .extension-container button {
   padding: 12px 24px;
@@ -18,6 +26,7 @@
   border: none;
   border-radius: 8px;
   transition: background-color 0.3s;
+  width: 100%; /* Make button wide like a wallet */
 }
 
 .extension-container button:hover {

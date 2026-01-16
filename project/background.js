@@ -15,6 +15,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
+// Listen for EXTERNAL messages (from localhost web app)
+chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
+  // Optional: Verify the sender is your localhost
+  if (sender.url && (sender.url.includes("localhost:5173") || sender.url.includes("localhost:3000"))) {
+    if (msg.type === 'WALLET_CONNECTED') {
+      const { walletAddress, delegationSignature } = msg.payload;
+      console.log('[Background] Received external wallet:', walletAddress);
+      chrome.storage.local.set({
+        walletAddress: walletAddress,
+        isDelegated: true,
+        delegationSignature: delegationSignature || null
+      }, () => {
+        console.log('[Background] Wallet saved via external message.');
+        sendResponse({ success: true });
+      });
+      return true; // Keep channel open for async response
+    }
+  }
+});
+
 
 // Ensure offscreen document exists
 async function ensureOffscreen() {

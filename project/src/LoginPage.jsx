@@ -1,9 +1,10 @@
-
 import React, { useEffect, useState } from 'react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { useWallet } from '@solana/wallet-adapter-react';
 import '@solana/wallet-adapter-react-ui/styles.css';
 
+
+const EXTENSION_ID = "gcpoapcodfihojnjfcmhabdebfaaihhe"; // REPLACE THIS WITH YOUR ACTUAL EXTENSION ID FROM CHROME://EXTENSIONS
 
 function LoginPage() {
   const { connected, publicKey } = useWallet();
@@ -16,10 +17,12 @@ function LoginPage() {
 
   useEffect(() => {
     if (connected && publicKey) {
-      // Only try to send message if running in extension context
-      if (window.chrome && window.chrome.runtime && window.chrome.runtime.id) {
+      // CHECK 1: Ensure Chrome runtime is available
+      if (window.chrome && window.chrome.runtime) {
         setStatus('Syncing wallet with extension...');
-        chrome.runtime.sendMessage(
+        // CHECK 2: Send to specific ID
+        window.chrome.runtime.sendMessage(
+          EXTENSION_ID, 
           {
             type: 'WALLET_CONNECTED',
             payload: {
@@ -28,15 +31,17 @@ function LoginPage() {
             }
           },
           (response) => {
-            if (chrome.runtime.lastError) {
-              setStatus('Error: Could not sync with extension.');
+            // CHECK 3: Handle potential errors (Extension not installed/enabled)
+            if (window.chrome.runtime.lastError) {
+              console.error("Extension Error:", window.chrome.runtime.lastError);
+              setStatus('Error: Extension not found. Is it installed?');
             } else if (response && response.success) {
-              setStatus('Wallet synced! You can continue.');
+              setStatus('Success! Wallet synced with extension.');
             }
           }
         );
       } else {
-        setStatus('Wallet connected (not running as extension, cannot sync).');
+        setStatus('Error: Not running in Chrome or Extension not active.');
       }
     }
   }, [connected, publicKey]);

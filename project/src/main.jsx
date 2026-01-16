@@ -6,6 +6,7 @@ import App from './App.jsx';
 import { WalletProvider } from '@solana/wallet-adapter-react';
 import { ConnectionProvider } from '@solana/wallet-adapter-react';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
+import '@solana/wallet-adapter-react-ui/styles.css';
 const endpoint = "https://api.mainnet-beta.solana.com";
 const wallets = [];
 
