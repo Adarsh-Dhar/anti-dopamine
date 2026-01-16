@@ -1,10 +1,12 @@
 
 import React, { useState, useEffect } from "react";
+import { useDopamineStaking } from "./Web3Manager";
 
 
 
 function DashboardPage() {
   const [metrics, setMetrics] = useState({ saturation: 0, motion: 0, loudness: 0 });
+  const { giveAllowance, revokeAllowance } = useDopamineStaking();
 
   const startTracking = async () => {
     if (window.chrome && window.chrome.tabs && window.chrome.tabs.query) {
@@ -38,6 +40,14 @@ function DashboardPage() {
       >
         Start Tracking
       </button>
+      <div style={{ marginTop: 20 }}>
+        <button onClick={() => giveAllowance(1)} style={{ padding: '8px 16px', marginRight: 8, background: 'green', color: 'white', border: 'none', borderRadius: 5, cursor: 'pointer' }}>
+          Start Session (Give Allowance)
+        </button>
+        <button onClick={revokeAllowance} style={{ padding: '8px 16px', background: 'red', color: 'white', border: 'none', borderRadius: 5, cursor: 'pointer' }}>
+          End Session (Revoke Allowance)
+        </button>
+      </div>
       <div style={{ marginTop: 20, background: '#f5f5f5', padding: 15, borderRadius: 10 }}>
         <h3>Live Metrics</h3>
         <p>🎨 Saturation: <strong>{(metrics.saturation * 100).toFixed(0)}%</strong></p>
