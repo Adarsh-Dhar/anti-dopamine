@@ -1,3 +1,4 @@
+
 // project/offscreen.js
 
 let videoElement = null;
@@ -27,7 +28,6 @@ chrome.runtime.onMessage.addListener(async (msg) => {
 async function startLiveStream(streamId) {
   // 1. Cleanup old streams
   if (videoElement) {
-    // Stop all tracks to release the previous stream
     if (videoElement.srcObject) {
       videoElement.srcObject.getTracks().forEach(t => t.stop());
     }
@@ -37,7 +37,7 @@ async function startLiveStream(streamId) {
 
   console.log('[Offscreen] Requesting getUserMedia...');
 
-  // 2. Get the Live Tab Stream (Video + Audio)
+  // 2. Get the Live Tab Stream
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: {
       mandatory: {
@@ -59,23 +59,30 @@ async function startLiveStream(streamId) {
   console.log('[Offscreen] Live stream connected successfully.');
 
   // 3. Play stream in hidden video element
+  // We keep this muted to avoid "double audio" (we play it via AudioContext below)
   videoElement = document.createElement('video');
   videoElement.srcObject = stream;
-  videoElement.muted = true; // Mute to prevent echo loop
+  videoElement.muted = true; 
   videoElement.play();
 
-  // 4. Setup Audio Analysis
+  // 4. Setup Audio Analysis AND Playback
   audioCtx = new AudioContext();
   const source = audioCtx.createMediaStreamSource(stream);
   analyser = audioCtx.createAnalyser();
   analyser.fftSize = 256;
+  
+  // A. Connect to Analyser (for your metrics)
   source.connect(analyser);
+  
+  // B. CRITICAL FIX: Connect to Speakers (so you can hear it!)
+  // This effectively "unmutes" the tab by playing the stream through the extension.
+  source.connect(audioCtx.destination); 
 
   // 5. Setup Canvas for Pixel Reading
   canvas = new OffscreenCanvas(100, 100);
   ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-  // 6. Start Analysis Loop (2 times per second)
+  // 6. Start Analysis Loop
   analysisInterval = setInterval(analyzeCurrentFrame, 500);
 }
 
