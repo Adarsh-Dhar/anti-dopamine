@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { ConnectionProvider, WalletProvider, useWallet } from '@solana/wallet-adapter-react';
-import { PhantomWalletAdapter } from '@solana/wallet-adapter-phantom';
 import LoginPage from './LoginPage.jsx';
 import AccountPage from './AccountPage.jsx';
 import DashboardPage from './DashboardPage.jsx';
@@ -18,7 +17,8 @@ function RequireWallet({ children }) {
 function App() {
   const [metrics, setMetrics] = useState({ saturation: 0, motion: 0, loudness: 0 });
   const [error, setError] = useState(null);
-  const wallets = useMemo(() => [new PhantomWalletAdapter()], []);
+  // No wallets needed, Phantom removed
+  const wallets = useMemo(() => [], []);
   const endpoint = "https://api.mainnet-beta.solana.com"; // Replace with your desired endpoint
 
   const startTracking = async () => {
@@ -39,8 +39,12 @@ function App() {
         setError(msg.message);
       }
     };
-    chrome.runtime.onMessage.addListener(listener);
-    return () => chrome.runtime.onMessage.removeListener(listener);
+    if (window.chrome && window.chrome.runtime && window.chrome.runtime.onMessage && window.chrome.runtime.onMessage.addListener) {
+      window.chrome.runtime.onMessage.addListener(listener);
+      return () => window.chrome.runtime.onMessage.removeListener(listener);
+    }
+    // If not in extension context, do nothing
+    return undefined;
   }, []);
 
   return (

@@ -1,3 +1,19 @@
+// Listen for wallet connection messages from the UI
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === 'WALLET_CONNECTED') {
+    const { walletAddress, delegationSignature } = msg.payload;
+    console.log('[Background] Received wallet:', walletAddress);
+    chrome.storage.local.set({
+      walletAddress: walletAddress,
+      isDelegated: true,
+      delegationSignature: delegationSignature || null
+    }, () => {
+      console.log('[Background] Wallet saved to storage.');
+      sendResponse({ success: true });
+    });
+    return true; // Keep channel open for async response
+  }
+});
 
 
 // Ensure offscreen document exists
