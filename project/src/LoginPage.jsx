@@ -1,7 +1,14 @@
+
 import React, { useEffect, useState } from 'react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { useWallet } from '@solana/wallet-adapter-react';
 import '@solana/wallet-adapter-react-ui/styles.css';
+
+// ----------------------------------------------------------------------
+// 1. GET THIS ID FROM chrome://extensions
+// You MUST copy/paste your specific ID here for this to work.
+// ----------------------------------------------------------------------
+const EXTENSION_ID = "gcpoapcodfihojnjfcmhabdebfaaihhe"; 
 
 
 
@@ -10,78 +17,69 @@ function LoginPage() {
   const { connected, publicKey } = useWallet();
   const [status, setStatus] = useState('');
 
+  // 1. If we are in the POPUP, we want a button to open the Web App
+  const openWebApp = () => {
+    window.open('http://localhost:5173', '_blank');
+  };
 
-
+  // 2. If we are in the WEB APP (Localhost), send data to Extension
   useEffect(() => {
     if (connected && publicKey) {
-      // CHECK 1: Ensure Chrome runtime is available
-      if (window.chrome && window.chrome.runtime) {
-        setStatus('Syncing wallet with extension...');
-        // CHECK 2: Send to specific ID
-        window.chrome.runtime.sendMessage(
-          EXTENSION_ID, 
-          {
+      // Check if we are running in the browser (not extension popup)
+      const isExtension = window.chrome && window.chrome.runtime && window.chrome.runtime.id;
+      const isWebApp = !isExtension || window.location.href.includes('localhost');
+
+      if (isWebApp) {
+        console.log("Web App detected. Sending key to extension:", EXTENSION_ID);
+        // SEND MESSAGE TO THE BRIDGE
+        if (window.chrome && window.chrome.runtime) {
+          window.chrome.runtime.sendMessage(EXTENSION_ID, {
             type: 'WALLET_CONNECTED',
-            payload: {
-              walletAddress: publicKey.toBase58(),
-              delegationSignature: 'mock_signature_for_now' // Replace with real signature if needed
-            }
-          },
-          (response) => {
-            // CHECK 3: Handle potential errors (Extension not installed/enabled)
-            if (window.chrome.runtime.lastError) {
-              console.error("Extension Error:", window.chrome.runtime.lastError);
-              setStatus('Error: Extension not found. Is it installed?');
-            } else if (response && response.success) {
-              setStatus('Success! Wallet synced with extension.');
-            }
-          }
-        );
-      } else {
-        setStatus('Error: Not running in Chrome or Extension not active.');
+            publicKey: publicKey.toBase58()
+          }, (response) => {
+             // Optional: Close window after success
+             if (!window.chrome.runtime.lastError) {
+                setStatus('Linked to Extension! You can close this tab.');
+             } else {
+                setStatus('Extension not found. Make sure it is installed.');
+             }
+          });
+        }
       }
     }
   }, [connected, publicKey]);
 
   return (
     <div className="login-page" style={{ 
-      display: 'flex', 
-      flexDirection: 'column', 
-      alignItems: 'center', 
-      justifyContent: 'center', 
-      height: '100%',
-      padding: '20px',
-      minHeight: '400px',
-      minWidth: '300px'
+      display: 'flex', flexDirection: 'column', alignItems: 'center', 
+      justifyContent: 'center', height: '100%', padding: '20px', minHeight: '600px',minWidth:"360px"
     }}>
       <h2 style={{ marginBottom: 30 }}>Login</h2>
-      {connected && publicKey ? (
-        <div style={{
-          margin: '100px 100px',
-          padding: '100px',
-          background: '#f5f5f5',
-          borderRadius: '100px',
-          wordBreak: 'break-all',
-          fontFamily: 'monospace',
-          fontSize: 15,
-          color: '#333',
-          textAlign: 'center',
-          width: '80%'
-        }}>
-          <span style={{ fontWeight: 'bold' }}>Wallet Active:</span>
-          <div style={{marginTop: 6, fontSize: '0.8em'}}>{publicKey.toBase58()}</div>
-        </div>
-      ) : (
-        <>
-          <div style={{ transform: 'scale(1.1)' }}>
+
+      {/* Logic: If in Popup, show "Open Web App". If in Web App, show Connect. */}
+      {window.location.href.includes('localhost') ? (
+         /* --- WEB APP VIEW --- */
+         <>
             <WalletMultiButton />
-          </div>
-          <p style={{marginTop: 20, color: '#888', fontSize: '0.9em'}}>
-            Connect your Solana wallet to start tracking.
-          </p>
-        </>
+            <p style={{marginTop: 20}}>{status || "Connect to sync with Extension"}</p>
+         </>
+      ) : (
+         /* --- EXTENSION POPUP VIEW --- */
+         <>
+            <button 
+              onClick={openWebApp}
+              style={{
+                background: '#646cff', color: 'white', padding: '12px 24px',
+                borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '1.1em'
+              }}
+            >
+              Connect via Web App
+            </button>
+            <p style={{marginTop: 15, fontSize: '0.9em', color: '#888'}}>
+              Opens full screen to connect wallet
+            </p>
+         </>
       )}
-      {status && <p style={{marginTop: 16, color: '#4caf50'}}>{status}</p>}
     </div>
   );
 }

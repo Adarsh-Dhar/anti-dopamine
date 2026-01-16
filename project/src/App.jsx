@@ -15,8 +15,34 @@ function RequireWallet({ children }) {
 }
 
 function App() {
+
   const [metrics, setMetrics] = useState({ saturation: 0, motion: 0, loudness: 0 });
   const [error, setError] = useState(null);
+  // Optionally, you can add wallet state here if you want to use it
+  // const [wallet, setWallet] = useState(null);
+  // const navigate = useNavigate(); // If you want to navigate programmatically
+
+  // Listen for walletPublicKey in chrome.storage.local (Web App Bridge)
+  useEffect(() => {
+    if (window.chrome && window.chrome.storage && window.chrome.storage.local) {
+      // Check if wallet was connected via the Web App Bridge
+      window.chrome.storage.local.get(['walletPublicKey'], (result) => {
+        if (result.walletPublicKey) {
+          console.log("Found wallet in storage:", result.walletPublicKey);
+          // setWallet(result.walletPublicKey); // Update your state here
+          // navigate('/dashboard');            // Go to dashboard
+        }
+      });
+
+      // Listen for real-time updates (if popup is open while they connect)
+      window.chrome.storage.onChanged.addListener((changes) => {
+        if (changes.walletPublicKey) {
+          console.log("Wallet connected externally!");
+          // navigate('/dashboard');
+        }
+      });
+    }
+  }, []);
 
   const startTracking = async () => {
     setError(null);

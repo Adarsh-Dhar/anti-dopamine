@@ -1,3 +1,17 @@
+// Listen for messages from the Web App (Localhost)
+chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
+  if (message.type === 'WALLET_CONNECTED') {
+    console.log("[Background] Received wallet from Web App:", message.publicKey);
+
+    // Save it to Extension Storage (which the Popup shares)
+    chrome.storage.local.set({ 
+      walletPublicKey: message.publicKey,
+      isConnected: true
+    }, () => {
+      console.log("[Background] Wallet saved to extension storage.");
+    });
+  }
+});
 // Listen for wallet connection messages from the UI
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'WALLET_CONNECTED') {
