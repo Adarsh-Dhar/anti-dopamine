@@ -1,40 +1,42 @@
 
-.extension-container {
-  width: 100%;        /* Fill the body width (360px) */
-  height: 100%;       /* Fill the body height */
-  padding: 20px;
-  box-sizing: border-box; /* Ensures padding doesn't break width */
-  text-align: center;
+/* Fit container to popup size and reduce padding for 600x360 */
+/* .extension-container {
+  width: 50%;
+  height: 50%;
+  padding: 24px 16px 16px 16px;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start; /* Start from top */
-}
+  justify-content: flex-start;
+  overflow-y: auto; /* Allow scrolling inside the container only */
+/* } */
 
-.extension-container h1 {
+/* .extension-container h1 {
   font-size: 1.5em;
   margin-bottom: 20px;
-}
+  margin-right: 20px;
+} */ 
 
 
-.extension-container button {
+/* .extension-container button {
   padding: 12px 24px;
   font-size: 1em;
   cursor: pointer;
-  background-color: #646cff;
+  background-color: #64ff71;
   color: white;
   border: none;
   border-radius: 8px;
   transition: background-color 0.3s;
-  width: 100%; /* Make button wide like a wallet */
-}
+  width: 80%; /* Make button wide like a wallet */
+/* }
 
 .extension-container button:hover {
-  background-color: #535bf2;
+  background-color: #f25353;
 }
 
 .message {
   margin-top: 16px;
   font-size: 1.2em;
-  color: #646cff;
-}
+  color: #ff64e5; */
+/* } */

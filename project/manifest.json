@@ -7,7 +7,7 @@
     "default_popup": "index.html",
     "default_title": "Hello World Extension",
     "default_width": 480,
-    "default_height": 600
+    "default_height": 1200
   },
   "permissions": [
     "tabCapture",

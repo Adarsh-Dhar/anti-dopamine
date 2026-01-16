@@ -4,16 +4,13 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import '@solana/wallet-adapter-react-ui/styles.css';
 
 
-const EXTENSION_ID = "gcpoapcodfihojnjfcmhabdebfaaihhe"; // REPLACE THIS WITH YOUR ACTUAL EXTENSION ID FROM CHROME://EXTENSIONS
+
 
 function LoginPage() {
   const { connected, publicKey } = useWallet();
   const [status, setStatus] = useState('');
 
-  // Open full screen login page in new tab
-  const handleFullScreen = () => {
-    window.open('http://localhost:5173/login', '_blank');
-  };
+
 
   useEffect(() => {
     if (connected && publicKey) {
@@ -47,33 +44,44 @@ function LoginPage() {
   }, [connected, publicKey]);
 
   return (
-    <div className="login-page">
-      <button onClick={handleFullScreen} style={{ width: '100%', padding: 12, marginBottom: 20, fontSize: 16, background: '#222', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
-        Open Full Screen Login
-      </button>
-      <h2>Login</h2>
+    <div className="login-page" style={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      alignItems: 'center', 
+      justifyContent: 'center', 
+      height: '100%',
+      padding: '20px',
+      minHeight: '400px',
+      minWidth: '300px'
+    }}>
+      <h2 style={{ marginBottom: 30 }}>Login</h2>
       {connected && publicKey ? (
         <div style={{
-          margin: '16px 0',
-          padding: '12px',
+          margin: '100px 100px',
+          padding: '100px',
           background: '#f5f5f5',
-          borderRadius: '8px',
+          borderRadius: '100px',
           wordBreak: 'break-all',
           fontFamily: 'monospace',
           fontSize: 15,
           color: '#333',
-          textAlign: 'center'
+          textAlign: 'center',
+          width: '80%'
         }}>
-          <span>Wallet Address:</span>
-          <div style={{marginTop: 6}}>{publicKey.toBase58()}</div>
+          <span style={{ fontWeight: 'bold' }}>Wallet Active:</span>
+          <div style={{marginTop: 6, fontSize: '0.8em'}}>{publicKey.toBase58()}</div>
         </div>
       ) : (
         <>
-          <WalletMultiButton />
-          <p style={{marginTop: 16}}>Connect your Phantom wallet to continue.</p>
+          <div style={{ transform: 'scale(1.1)' }}>
+            <WalletMultiButton />
+          </div>
+          <p style={{marginTop: 20, color: '#888', fontSize: '0.9em'}}>
+            Connect your Solana wallet to start tracking.
+          </p>
         </>
       )}
-      {status && <p style={{marginTop: 16, color: '#888'}}>{status}</p>}
+      {status && <p style={{marginTop: 16, color: '#4caf50'}}>{status}</p>}
     </div>
   );
 }
