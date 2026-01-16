@@ -1,56 +1,6 @@
-// Listen for messages from the Web App (Localhost)
-chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
-  if (message.type === 'WALLET_CONNECTED') {
-    console.log("[Background] Received wallet from Web App:", message.publicKey);
+// project/background.js
 
-    // Save it to Extension Storage (which the Popup shares)
-    chrome.storage.local.set({ 
-      walletPublicKey: message.publicKey,
-      isConnected: true
-    }, () => {
-      console.log("[Background] Wallet saved to extension storage.");
-    });
-  }
-});
-// Listen for wallet connection messages from the UI
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.type === 'WALLET_CONNECTED') {
-    const { walletAddress, delegationSignature } = msg.payload;
-    console.log('[Background] Received wallet:', walletAddress);
-    chrome.storage.local.set({
-      walletAddress: walletAddress,
-      isDelegated: true,
-      delegationSignature: delegationSignature || null
-    }, () => {
-      console.log('[Background] Wallet saved to storage.');
-      sendResponse({ success: true });
-    });
-    return true; // Keep channel open for async response
-  }
-});
-
-// Listen for EXTERNAL messages (from localhost web app)
-chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
-  // Optional: Verify the sender is your localhost
-  if (sender.url && (sender.url.includes("localhost:5173") || sender.url.includes("localhost:3000"))) {
-    if (msg.type === 'WALLET_CONNECTED') {
-      const { walletAddress, delegationSignature } = msg.payload;
-      console.log('[Background] Received external wallet:', walletAddress);
-      chrome.storage.local.set({
-        walletAddress: walletAddress,
-        isDelegated: true,
-        delegationSignature: delegationSignature || null
-      }, () => {
-        console.log('[Background] Wallet saved via external message.');
-        sendResponse({ success: true });
-      });
-      return true; // Keep channel open for async response
-    }
-  }
-});
-
-
-// Ensure offscreen document exists
+// 1. Setup Offscreen Document (For Audio/Video Analysis)
 async function ensureOffscreen() {
   if (await chrome.offscreen.hasDocument()) return;
   await chrome.offscreen.createDocument({
@@ -60,41 +10,80 @@ async function ensureOffscreen() {
   });
 }
 
-chrome.runtime.onMessage.addListener(async (msg, sender) => {
+// 2. LISTEN FOR EXTERNAL MESSAGES (From Localhost Web App)
+chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
+  // Check if it's the wallet connection message
+  if (message.type === 'WALLET_CONNECTED') {
+    console.log("[Background] Received wallet from Web App:", message.publicKey);
+
+    // Save to storage
+    chrome.storage.local.set({ 
+      walletPublicKey: message.publicKey,
+      isConnected: true
+    }, () => {
+      console.log("[Background] Wallet saved to extension storage.");
+      // Notify the Web App that we succeeded
+      sendResponse({ success: true });
+    });
+
+    // CRITICAL: Return true to keep the channel open for the async response above
+    return true; 
+  }
+});
+
+// 3. LISTEN FOR INTERNAL MESSAGES (From Popup or Offscreen)
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // A. Handle Start Tracking
   if (msg.type === 'START_TRACKING') {
-    const tabId = msg.tabId;
-    console.log(`[Background] Received START_TRACKING for Tab ID: ${tabId}`);
+    handleStartTracking(msg.tabId);
+  }
+  
+  // B. Handle Offscreen Logs (Optional debugging)
+  if (msg.type === 'OFFSCREEN_LOG') {
+    console.log(`[Offscreen] ${msg.message}`);
+  }
+  
+  if (msg.type === 'OFFSCREEN_ERROR') {
+    console.error(`[Offscreen Error] ${msg.message}`);
+  }
+});
 
-    try {
-      // 1. Get the Media Stream ID
-      // This ID grants access to BOTH Audio and Video of the tab
-      // FIX: Removed 'consumerTabId'. Now the offscreen document can access it!
-      const streamId = await chrome.tabCapture.getMediaStreamId({ 
-        targetTabId: tabId 
-      });
-      console.log("[Background] Got Stream ID:", streamId);
+// Helper: Logic to start tracking a tab
+async function handleStartTracking(tabId) {
+  console.log(`[Background] Starting loop for Tab ID: ${tabId}`);
+  try {
+    // Get Stream ID
+    const streamId = await chrome.tabCapture.getMediaStreamId({ 
+      targetTabId: tabId 
+    });
+    console.log("[Background] Got Stream ID:", streamId);
 
-      // 2. Launch Offscreen
-      await ensureOffscreen();
+    // Reset and Create Offscreen
+    // (Optional: Close old one first to ensure fresh state)
+    if (await chrome.offscreen.hasDocument()) {
+      await chrome.offscreen.closeDocument();
+    }
+    await ensureOffscreen();
 
-      // 3. Send Stream ID to Offscreen to start processing
+    // Send Stream ID to Offscreen
+    // Wait a tiny bit for the page to load listeners
+    setTimeout(() => {
       chrome.runtime.sendMessage({
         type: 'START_STREAM_ANALYSIS',
         data: { streamId }
       });
-      
-    } catch (err) {
-      // Handle the "Stream already active" error gracefully
-      if (err.message && err.message.includes("active stream")) {
-        console.error("[Background] Stream active. User must reload page.");
-        chrome.runtime.sendMessage({
-          type: 'TRACKING_ERROR',
-          message: 'Please reload the YouTube page to reset the tracker.'
-        });
-      } else {
-        console.error("[Background] Error:", err);
-      }
+      console.log("[Background] Sent START_STREAM_ANALYSIS");
+    }, 500);
+    
+  } catch (err) {
+    if (err.message && err.message.includes("active stream")) {
+      console.error("[Background] Stream active. User must reload page.");
+      chrome.runtime.sendMessage({
+        type: 'TRACKING_ERROR',
+        message: 'Please reload the YouTube page to reset the tracker.'
+      });
+    } else {
+      console.error("[Background] Error:", err);
     }
   }
-});
-
+}
