@@ -44,6 +44,17 @@ export const useDopamineStaking = () => {
       
       await connection.confirmTransaction(signature, 'confirmed');
       console.log("Allowance Given! Signature:", signature);
+
+      // NOTIFY BACKGROUND
+      if (window.chrome && window.chrome.runtime) {
+        // TODO: Replace with your actual extension ID
+        const EXTENSION_ID = "YOUR_EXTENSION_ID_HERE";
+        window.chrome.runtime.sendMessage(EXTENSION_ID, {
+          type: 'ALLOWANCE_CONFIRMED',
+          amount: amount // e.g. 10
+        });
+      }
+
       return signature;
 
     } catch (error) {
