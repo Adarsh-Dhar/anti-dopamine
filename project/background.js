@@ -29,6 +29,24 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
     // CRITICAL: Return true to keep the channel open for the async response above
     return true; 
   }
+  // Handle allowance confirmation
+  if (message.type === 'ALLOWANCE_CONFIRMED') {
+    console.log('[Background] Allowance confirmed for', message.amount, 'USDC');
+    // Show a notification or set a flag in storage
+    if (chrome.notifications) {
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'icon.png',
+        title: 'Allowance Set',
+        message: `Allowance of ${message.amount} USDC set successfully!`
+      });
+    } else {
+      // Fallback: set a flag in storage
+      chrome.storage.local.set({ allowanceConfirmed: true });
+    }
+    sendResponse({ success: true });
+    return true;
+  }
 });
 
 // 3. LISTEN FOR INTERNAL MESSAGES (From Popup or Offscreen)

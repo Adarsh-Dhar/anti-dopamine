@@ -6,8 +6,8 @@ import {
 } from '@solana/spl-token';
 import { PublicKey, Transaction } from '@solana/web3.js';
 
-// USDC Devnet Address (Change to Mainnet 'EPjFW...' for production)
-const USDC_MINT = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"); 
+// USDC Devnet Address (faucet/testnet): https://explorer.solana.com/address/4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU?cluster=devnet
+const USDC_MINT = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
 const BACKEND_WALLET = new PublicKey("EYSHit3n1e6qQWKG6L4g34SNoG6P7R9U7y6MGREBLebB");
 
 export const useDopamineStaking = () => {
