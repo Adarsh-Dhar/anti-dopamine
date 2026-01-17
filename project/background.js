@@ -1,20 +1,21 @@
-// CONFIGURATION
-const DECAY_RATE = 0.05;       // How much score drops per second when calm
-const GROWTH_MULTIPLIER = 0.5; // How fast score rises (Tweak this!)
-const MAX_SCORE = 10000;       // Cap the score if needed
+// project/background.js
 
-// STATE (Cached in memory for speed, synced to storage)
+// CONFIGURATION
+const DECAY_RATE = 2.0;        // INCREASED: Drop score faster when calm (was 0.05)
+const GROWTH_MULTIPLIER = 0.5; // How fast score rises
+const MAX_SCORE = 10000;       
+
+// STATE
 let currentBrainrot = 0;
 let lastUpdate = Date.now();
 
-// Load initial state from storage
+// Load initial state
 chrome.storage.local.get(['brainrotScore'], (result) => {
   if (result.brainrotScore) {
     currentBrainrot = parseFloat(result.brainrotScore);
   }
 });
 
-// 1. Setup Offscreen
 async function ensureOffscreen() {
   if (await chrome.offscreen.hasDocument()) return;
   await chrome.offscreen.createDocument({
@@ -24,76 +25,34 @@ async function ensureOffscreen() {
   });
 }
 
-// 2. LISTEN FOR EXTERNAL MESSAGES (From Localhost Web App)
+// MESSAGING
 chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
-  // Check if it's the wallet connection message
   if (message.type === 'WALLET_CONNECTED') {
-    console.log("[Background] Received wallet from Web App:", message.publicKey);
-
-    // Save to storage
-    chrome.storage.local.set({ 
-      walletPublicKey: message.publicKey,
-      isConnected: true
-    }, () => {
-      console.log("[Background] Wallet saved to extension storage.");
-      // Notify the Web App that we succeeded
+    console.log("[Background] Wallet:", message.publicKey);
+    chrome.storage.local.set({ walletPublicKey: message.publicKey, isConnected: true }, () => {
       sendResponse({ success: true });
     });
-
-    // CRITICAL: Return true to keep the channel open for the async response above
     return true; 
   }
-  // Handle allowance confirmation
   if (message.type === 'ALLOWANCE_CONFIRMED') {
-    console.log('[Background] Allowance confirmed for', message.amount, 'USDC');
-    // Show a notification or set a flag in storage
-    if (chrome.notifications) {
-      chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'icon.png',
-        title: 'Allowance Set',
-        message: `Allowance of ${message.amount} USDC set successfully!`
-      });
-    } else {
-      // Fallback: set a flag in storage
-      chrome.storage.local.set({ allowanceConfirmed: true });
-    }
+    chrome.storage.local.set({ allowanceConfirmed: true });
     sendResponse({ success: true });
     return true;
   }
 });
 
-// 3. LISTEN FOR INTERNAL MESSAGES (From Popup or Offscreen)
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  // A. HANDLE METRICS FROM OFFSCREEN (The Core Logic)
-  if (msg.type === 'METRICS_UPDATE') {
-    processMetrics(msg.data);
-  }
-
-  // B. HANDLE START TRACKING
-  if (msg.type === 'START_TRACKING') {
-    handleStartTracking(msg.tabId);
-  }
-
-  // C. HANDLE AI ANALYSIS (From Offscreen -> Server)
-  if (msg.type === 'ANALYZE_SEMANTIC') {
-    handleSemanticAnalysis(msg.data.image);
-  }
-
-  // D. Handle Offscreen Logs (Optional debugging)
-  if (msg.type === 'OFFSCREEN_LOG') {
-    console.log(`[Offscreen] ${msg.message}`);
-  }
-  
-  if (msg.type === 'OFFSCREEN_ERROR') {
-    console.error(`[Offscreen Error] ${msg.message}`);
-  }
+  if (msg.type === 'METRICS_UPDATE') processMetrics(msg.data);
+  if (msg.type === 'START_TRACKING') handleStartTracking(msg.tabId);
+  if (msg.type === 'ANALYZE_SEMANTIC') handleSemanticAnalysis(msg.data.image);
 });
 
-// CORE LOGIC: Calculate Accumulation
+// --------------------------------------------------------------------------
+// CORE LOGIC FIX: "The Guard Clause"
+// --------------------------------------------------------------------------
 function processMetrics(data) {
   const now = Date.now();
-  const timeDelta = (now - lastUpdate) / 1000; // Seconds since last update
+  const timeDelta = (now - lastUpdate) / 1000; 
   lastUpdate = now;
 
   // FIX: Detect if video is "Idle" (Paused, Static, or Muted)
@@ -143,7 +102,6 @@ function processMetrics(data) {
   }).catch(() => {});
 }
 
-// Helper: Logic to start tracking a tab
 async function handleStartTracking(tabId) {
   try {
     const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
@@ -153,12 +111,7 @@ async function handleStartTracking(tabId) {
     }, 500);
   } catch (e) {
     if (e.message && e.message.includes("active stream")) {
-      chrome.runtime.sendMessage({
-        type: 'TRACKING_ERROR',
-        message: 'Please reload the YouTube page to reset the tracker.'
-      });
-    } else {
-      console.error(e);
+      chrome.runtime.sendMessage({ type: 'TRACKING_ERROR', message: 'Reload YouTube page.' });
     }
   }
 }
@@ -171,12 +124,9 @@ async function handleSemanticAnalysis(imageBase64) {
         body: JSON.stringify({ imageBase64 })
     });
     const result = await response.json();
-    
     if (result.success && result.data.score) {
-       // AI detected Brainrot! Add a massive spike.
        const aiSpike = result.data.score * 0.5; 
        currentBrainrot += aiSpike;
-       console.log(`🤖 AI Spike Applied: +${aiSpike}`);
     }
   } catch(e) { console.error(e); }
 }
