@@ -1,15 +1,17 @@
-let offscreenCreating = false;
+// --- MISSING CONSTANTS ---
+const DECAY_RATE = 2.0;
+const GROWTH_MULTIPLIER = 0.5;
+const MAX_SCORE = 10000;
+const SYNC_THRESHOLD = 0.0001; // Set this LOW (0.0001) for testing!
+
 // STATE
 let currentBrainrot = 0;
 let lastUpdate = Date.now();
 let totalAllowance = 0;
 let cumulativeSlashed = 0;
 let walletPublicKey = null;
-// FIX 2: Define missing constants
-const DECAY_RATE = 2.0;       
-const GROWTH_MULTIPLIER = 0.5; 
-const MAX_SCORE = 10000;       
-const SYNC_THRESHOLD = 0.05; // Only transact if change is > 0.05 USDC
+
+let offscreenCreating = false;
 
 // project/background.js
 
