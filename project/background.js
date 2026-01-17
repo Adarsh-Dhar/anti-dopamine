@@ -96,46 +96,51 @@ function processMetrics(data) {
   const timeDelta = (now - lastUpdate) / 1000; // Seconds since last update
   lastUpdate = now;
 
-  // 1. Calculate "Instant Dopamine" (Intensity of this exact second)
-  // Formula: High Motion + Loud Audio + Rapid Cuts + High BPM = BIG NUMBER
-  const instantDopamine = 
-    (data.motion * 20) +       // Motion is strongest signal (0-1 -> 0-20)
-    (data.loudness * 0.1) +    // Loudness (0-255 -> 0-25)
-    (data.cutsPerMinute * 2) + // Each cut adds pressure
-    (data.bpm * 0.05);         // Fast tempo adds pressure
+  // FIX: Detect if video is "Idle" (Paused, Static, or Muted)
+  // Thresholds: Motion < 1% change, Loudness < 5/255
+  const isIdle = data.motion < 0.01 && data.loudness < 5;
 
-  // 2. Determine Change (Growth or Decay)
+  let instantDopamine = 0;
+
+  if (isIdle) {
+    // If Idle, force Dopamine to 0 (Ignore historical Cuts/BPM)
+    instantDopamine = 0;
+  } else {
+    // Only calculate score if content is ACTUALLY playing
+    instantDopamine = 
+      (data.motion * 20) +       
+      (data.loudness * 0.1) +    
+      (data.cutsPerMinute * 2) + // Only counts if playing!
+      (data.bpm * 0.05);         
+  }
+
+  // 2. Determine Change
   let change = 0;
 
   if (instantDopamine > 5) {
-    // HIGH STIMULATION -> Increase Score
-    // The higher the dopamine, the faster it grows (Exponential-ish)
+    // Growth
     change = (instantDopamine * GROWTH_MULTIPLIER * timeDelta);
   } else {
-    // LOW STIMULATION -> Decrease Score (Recovery)
+    // Decay (Now happens immediately when paused!)
     change = -(DECAY_RATE * timeDelta);
   }
 
   // 3. Update State
   currentBrainrot += change;
-  
-  // Boundaries (Can't go below 0)
   if (currentBrainrot < 0) currentBrainrot = 0;
   if (currentBrainrot > MAX_SCORE) currentBrainrot = MAX_SCORE;
 
-  // 4. Save & Broadcast (Debounce storage to save writes if needed, but 1s is fine)
+  // 4. Save & Broadcast
   const formattedScore = parseFloat(currentBrainrot.toFixed(2));
-  
   chrome.storage.local.set({ brainrotScore: formattedScore });
   
-  // Send "Live" update to UI
   chrome.runtime.sendMessage({
     type: 'SCORE_UPDATE',
     data: {
       score: formattedScore,
-      instantParams: data // Send raw stats for debug/graphs
+      instantParams: data 
     }
-  }).catch(() => {}); // Ignore error if popup is closed
+  }).catch(() => {});
 }
 
 // Helper: Logic to start tracking a tab
