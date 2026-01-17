@@ -119,35 +119,33 @@ app.post('/api/refund', async (req, res) => {
 });
 
 app.post('/api/analyze-frame', async (req, res) => {
-  // ... (Keep your existing Gemini logic here) ...
-  // Paste previous Gemini code here if needed, or leave as is if you merged files.
-  // For brevity, I am assuming the Gemini logic is unchanged.
-  const { 
-    Connection, 
-    Keypair, 
-    PublicKey, 
-    Transaction, 
-    sendAndConfirmTransaction 
-  } = require('@solana/web3.js');
-  const { 
-    createTransferCheckedInstruction, 
-    getAssociatedTokenAddress, 
-    TOKEN_PROGRAM_ID 
-  } = require('@solana/spl-token');
-  const bs58 = require('bs58');
-  const { GoogleGenerativeAI } = require("@google/generative-ai");
-
-   if (!imageBase64) return res.status(400).json({ error: "No image" });
+  try {
+    // FIX 1: Extract imageBase64 from the request body
+    const { imageBase64 } = req.body; 
+    
+    if (!imageBase64) {
+      return res.status(400).json({ success: false, error: "No image provided" });
+    }
    
-   try {
-     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
-     const prompt = "Analyze this video frame. Rate it from 0-100 for 'Dopamine Intensity' or 'Brainrot'. Return JSON: { \"score\": number }.";
-     const result = await model.generateContent([prompt, { inlineData: { data: base64Data, mimeType: "image/jpeg" } }]);
-     const text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
-     res.json({ success: true, data: JSON.parse(text) });
-   } catch (e) {
+    // Clean string
+    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+    
+    const prompt = "Analyze this video frame. Rate it from 0-100 for 'Dopamine Intensity' or 'Brainrot'. Return JSON: { \"score\": number }.";
+    
+    const result = await model.generateContent([
+      prompt, 
+      { inlineData: { data: base64Data, mimeType: "image/jpeg" } }
+    ]);
+    
+    const text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    const data = JSON.parse(text);
+    
+    res.json({ success: true, data });
+
+  } catch (e) {
+     console.error("AI Analysis Error:", e);
      res.status(500).json({ success: false, error: e.message });
-   }
+  }
 });
 
 const PORT = process.env.PORT || 3001;

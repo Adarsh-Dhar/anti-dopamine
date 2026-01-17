@@ -48,7 +48,7 @@ export const useDopamineStaking = () => {
       // NOTIFY BACKGROUND
       if (window.chrome && window.chrome.runtime) {
         // TODO: Replace with your actual extension ID
-        const EXTENSION_ID = "YOUR_EXTENSION_ID_HERE";
+        const EXTENSION_ID = "gcpoapcodfihojnjfcmhabdebfaaihhe";
         window.chrome.runtime.sendMessage(EXTENSION_ID, {
           type: 'ALLOWANCE_CONFIRMED',
           amount: amount // e.g. 10

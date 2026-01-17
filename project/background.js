@@ -1,3 +1,16 @@
+let offscreenCreating = false;
+// STATE
+let currentBrainrot = 0;
+let lastUpdate = Date.now();
+let totalAllowance = 0;
+let cumulativeSlashed = 0;
+let walletPublicKey = null;
+// FIX 2: Define missing constants
+const DECAY_RATE = 2.0;       
+const GROWTH_MULTIPLIER = 0.5; 
+const MAX_SCORE = 10000;       
+const SYNC_THRESHOLD = 0.05; // Only transact if change is > 0.05 USDC
+
 // project/background.js
 
 // project/background.js
@@ -16,11 +29,21 @@ chrome.storage.local.get(['brainrotScore', 'allowanceAmount', 'cumulativeSlashed
 // ... (Keep ensureOffscreen and message listeners same as before) ...
 async function ensureOffscreen() {
   if (await chrome.offscreen.hasDocument()) return;
-  await chrome.offscreen.createDocument({
-    url: 'offscreen.html',
-    reasons: ['AUDIO_PLAYBACK', 'DISPLAY_MEDIA'],
-    justification: 'Analyze video stream for metrics.'
-  });
+  if (offscreenCreating) return;
+  offscreenCreating = true;
+  try {
+    // Defensive: close any existing offscreen document
+    if (await chrome.offscreen.hasDocument()) {
+      await chrome.offscreen.closeDocument();
+    }
+    await chrome.offscreen.createDocument({
+      url: 'offscreen.html',
+      reasons: ['AUDIO_PLAYBACK', 'DISPLAY_MEDIA'],
+      justification: 'Analyze video stream for metrics.'
+    });
+  } finally {
+    offscreenCreating = false;
+  }
 }
 
 chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
@@ -134,14 +157,13 @@ async function reconcileFinances(score) {
 }
 
 async function handleStartTracking(tabId) {
-    // ... (Your existing logic) ...
     try {
+        await ensureOffscreen(); // Ensure offscreen doc exists first!
         const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
-        await ensureOffscreen();
         setTimeout(() => {
           chrome.runtime.sendMessage({ type: 'START_STREAM_ANALYSIS', data: { streamId } });
         }, 500);
-      } catch (e) { console.error(e); }
+    } catch (e) { console.error(e); }
 }
 
 async function handleSemanticAnalysis(imageBase64) {
@@ -168,15 +190,7 @@ chrome.storage.local.get(['brainrotScore', 'allowanceAmount', 'cumulativeSlashed
   if (res.walletPublicKey) walletPublicKey = res.walletPublicKey;
 });
 
-// ... (Keep ensureOffscreen and message listeners same as before) ...
-async function ensureOffscreen() {
-  if (await chrome.offscreen.hasDocument()) return;
-  await chrome.offscreen.createDocument({
-    url: 'offscreen.html',
-    reasons: ['AUDIO_PLAYBACK', 'DISPLAY_MEDIA'],
-    justification: 'Analyze video stream for metrics.'
-  });
-}
+
 
 chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
   if (message.type === 'WALLET_CONNECTED') {

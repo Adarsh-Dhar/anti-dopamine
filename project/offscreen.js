@@ -38,28 +38,51 @@ chrome.runtime.onMessage.addListener(async (msg) => {
 });
 
 async function startLiveStream(streamId) {
+  // Clean up any previous state
   if (videoElement) {
-    if (videoElement.srcObject) {
-      videoElement.srcObject.getTracks().forEach(t => t.stop());
-    }
-    videoElement.remove();
-  }
-  if (analysisInterval) clearInterval(analysisInterval);
-
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: streamId }
-    },
-    video: {
-      mandatory: {
-        chromeMediaSource: 'tab',
-        chromeMediaSourceId: streamId,
-        maxWidth: 640,
-        maxHeight: 360,
-        maxFrameRate: 30
+    try {
+      if (videoElement.srcObject) {
+        videoElement.srcObject.getTracks().forEach(t => t.stop());
       }
-    }
-  });
+      videoElement.remove();
+    } catch (e) {}
+    videoElement = null;
+  }
+  if (analysisInterval) {
+    clearInterval(analysisInterval);
+    analysisInterval = null;
+  }
+  if (audioCtx) {
+    try { audioCtx.close(); } catch (e) {}
+    audioCtx = null;
+  }
+  analyser = null;
+  previousPixelData = null;
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: streamId }
+      },
+      video: {
+        mandatory: {
+          chromeMediaSource: 'tab',
+          chromeMediaSourceId: streamId,
+          maxWidth: 640,
+          maxHeight: 360,
+          maxFrameRate: 30
+        }
+      }
+    });
+  } catch (err) {
+    // Clean up and notify background
+    chrome.runtime.sendMessage({
+      type: 'TRACKING_ERROR',
+      message: 'Stream Access Denied or Unavailable. ' + (err && err.message ? err.message : String(err))
+    });
+    return;
+  }
 
   videoElement = document.createElement('video');
   videoElement.srcObject = stream;
