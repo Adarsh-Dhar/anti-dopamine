@@ -2,7 +2,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors'); // npm install cors
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+// const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { 
   Connection, 
   Keypair, 
@@ -22,38 +22,32 @@ const app = express();
 app.use(cors()); // Allow Extension to call Server
 app.use(express.json({ limit: '10mb' })); // Allow large image payloads
 // ----------------------------------------------------
-// GEMINI SETUP
-// ----------------------------------------------------
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+
 
 app.post('/api/analyze-frame', async (req, res) => {
-  const { imageBase64 } = req.body; // Expects "data:image/jpeg;base64,..."
-  if (!imageBase64) return res.status(400).json({ error: "No image provided" });
-  try {
-    // Clean base64 string
-    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
-    const prompt = "Analyze this video frame. Rate it from 0-100 for 'Dopamine Intensity' or 'Brainrot'. 100 means highly stimulating (split screens, rapid text, gaming overlays, memes). 0 means calm (static text, nature). Return ONLY a JSON object: { \"score\": number, \"reason\": \"short string\" }.";
-    const result = await model.generateContent([
-      prompt,
-      {
-        inlineData: {
-          data: base64Data,
-          mimeType: "image/jpeg",
-        },
-      },
-    ]);
-    const response = await result.response;
-    const text = response.text();
-    // Parse the JSON from Gemini
-    const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const data = JSON.parse(cleanText);
-    console.log("Gemini Analysis:", data);
-    res.json({ success: true, data });
-  } catch (e) {
-    console.error("Gemini Error:", e);
-    res.status(500).json({ success: false, error: e.message });
-  }
+  // For now, use sample data to generate a score
+  // You can use random or deterministic logic based on the imageBase64 or just cycle through some values
+  const sampleScores = [10, 25, 35, 40, 45, 55, 65, 68, 75, 80, 90];
+  // Use a hash of the imageBase64 to pick a score, or just random for now
+  const idx = Math.floor(Math.random() * sampleScores.length);
+  const score = sampleScores[idx];
+  const reasons = [
+    'Very calm frame',
+    'Some text overlay',
+    'Mild stimulation',
+    'Moderate stimulation',
+    'Quick engagement elements',
+    'Noticeable overlays',
+    'Meme-like content',
+    'Prominent text overlay',
+    'Rapid edits',
+    'Split screens',
+    'Extreme brainrot elements'
+  ];
+  const reason = reasons[idx];
+  const data = { score, reason };
+  console.log("Sample Analysis:", data);
+  res.json({ success: true, data });
 });
 
 // Setup
