@@ -1,3 +1,21 @@
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === 'ANALYZE_SEMANTIC') {
+    fetch('http://localhost:3001/api/analyze-frame', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageBase64: msg.data.image })
+    })
+    .then(res => res.json())
+    .then(data => {
+       console.log("Brainrot Score:", data.data?.score);
+       // Save to storage or send back to UI
+       if (data.data?.score !== undefined) {
+         chrome.storage.local.set({ semanticScore: data.data.score });
+       }
+    })
+    .catch(err => console.error("AI Analysis Failed:", err));
+  }
+});
 // project/background.js
 
 // 1. Setup Offscreen Document (For Audio/Video Analysis)

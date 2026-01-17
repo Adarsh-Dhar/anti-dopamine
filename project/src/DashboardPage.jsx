@@ -6,6 +6,7 @@ import { useDopamineStaking } from "./Web3Manager";
 
 function DashboardPage() {
   const [metrics, setMetrics] = useState({ saturation: 0, motion: 0, loudness: 0 });
+  const [semanticScore, setSemanticScore] = useState(null);
   const { giveAllowance, revokeAllowance } = useDopamineStaking();
   const [allowanceConfirmed, setAllowanceConfirmed] = useState(false);
 
@@ -29,19 +30,34 @@ function DashboardPage() {
     if (window.chrome && window.chrome.runtime && window.chrome.runtime.onMessage && window.chrome.runtime.onMessage.addListener) {
       window.chrome.runtime.onMessage.addListener(listener);
     }
-    // Check for allowance confirmation in storage
+    // Listen for semanticScore changes in chrome.storage
+    let storageListener;
+    if (window.chrome && window.chrome.storage && window.chrome.storage.onChanged) {
+      storageListener = (changes, area) => {
+        if (area === 'local' && changes.semanticScore) {
+          setSemanticScore(changes.semanticScore.newValue);
+        }
+      };
+      window.chrome.storage.onChanged.addListener(storageListener);
+    }
+    // Initial load for allowanceConfirmed and semanticScore
     if (window.chrome && window.chrome.storage && window.chrome.storage.local) {
-      window.chrome.storage.local.get(['allowanceConfirmed'], (result) => {
+      window.chrome.storage.local.get(['allowanceConfirmed', 'semanticScore'], (result) => {
         if (result.allowanceConfirmed) {
           setAllowanceConfirmed(true);
-          // Optionally clear the flag after showing
           window.chrome.storage.local.remove(['allowanceConfirmed']);
+        }
+        if (result.semanticScore !== undefined) {
+          setSemanticScore(result.semanticScore);
         }
       });
     }
     return () => {
       if (window.chrome && window.chrome.runtime && window.chrome.runtime.onMessage && window.chrome.runtime.onMessage.removeListener) {
         window.chrome.runtime.onMessage.removeListener(listener);
+      }
+      if (window.chrome && window.chrome.storage && window.chrome.storage.onChanged && storageListener) {
+        window.chrome.storage.onChanged.removeListener(storageListener);
       }
     };
   }, []);
@@ -54,6 +70,12 @@ function DashboardPage() {
         </div>
       )}
       <button
+        onClick={startTracking}
+        style={{ padding: '10px 20px', background: '#1a7f1a', color: 'white', border: 'none', borderRadius: 5, cursor: 'pointer', marginBottom: 12, marginRight: 10 }}
+      >
+        ▶️ Start Tracking
+      </button>
+      <button
         onClick={() => window.open('http://localhost:5173/setup', '_blank')}
         style={{ padding: '10px 20px', background: '#646cff', color: 'white', border: 'none', borderRadius: 5, cursor: 'pointer', marginBottom: 16 }}
       >
@@ -64,6 +86,7 @@ function DashboardPage() {
         <p>Saturation: <strong>{(metrics.saturation * 100).toFixed(0)}%</strong></p>
         <p>Motion: <strong>{(metrics.motion * 100).toFixed(0)}%</strong></p>
         <p>Loudness: <strong>{metrics.loudness.toFixed(0)}</strong></p>
+        <p>Brainrot Score: <strong>{semanticScore !== null ? semanticScore : '...'}</strong></p>
       </div>
     </div>
   );

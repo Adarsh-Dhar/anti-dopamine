@@ -1,4 +1,3 @@
-
 // project/offscreen.js
 
 let videoElement = null;
@@ -8,6 +7,19 @@ let audioCtx = null;
 let analyser = null;
 let previousPixelData = null;
 let analysisInterval = null;
+
+// METRIC STATE (Sliding Windows)
+let cutTimestamps = [];  // Stores timestamps of scene cuts
+let beatTimestamps = []; // Stores timestamps of audio beats
+let lastCutTime = 0;
+let lastBeatTime = 0;
+let lastAiCheck = 0;
+
+// CONFIG
+const CUT_THRESHOLD = 0.4; // 40% pixel change = New Scene
+const CUT_COOLDOWN = 500;  // ms between cuts
+const BEAT_THRESHOLD = 140; // Audio energy threshold (0-255)
+const BEAT_COOLDOWN = 250; // Max 240 BPM
 
 chrome.runtime.onMessage.addListener(async (msg) => {
   if (msg.type === 'START_STREAM_ANALYSIS') {
@@ -26,7 +38,6 @@ chrome.runtime.onMessage.addListener(async (msg) => {
 });
 
 async function startLiveStream(streamId) {
-  // 1. Cleanup old streams
   if (videoElement) {
     if (videoElement.srcObject) {
       videoElement.srcObject.getTracks().forEach(t => t.stop());
@@ -35,15 +46,9 @@ async function startLiveStream(streamId) {
   }
   if (analysisInterval) clearInterval(analysisInterval);
 
-  console.log('[Offscreen] Requesting getUserMedia...');
-
-  // 2. Get the Live Tab Stream
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: {
-      mandatory: {
-        chromeMediaSource: 'tab',
-        chromeMediaSourceId: streamId
-      }
+      mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: streamId }
     },
     video: {
       mandatory: {
@@ -56,44 +61,37 @@ async function startLiveStream(streamId) {
     }
   });
 
-  console.log('[Offscreen] Live stream connected successfully.');
-
-  // 3. Play stream in hidden video element
-  // We keep this muted to avoid "double audio" (we play it via AudioContext below)
   videoElement = document.createElement('video');
   videoElement.srcObject = stream;
   videoElement.muted = true; 
   videoElement.play();
 
-  // 4. Setup Audio Analysis AND Playback
   audioCtx = new AudioContext();
   const source = audioCtx.createMediaStreamSource(stream);
   analyser = audioCtx.createAnalyser();
   analyser.fftSize = 256;
-  
-  // A. Connect to Analyser (for your metrics)
   source.connect(analyser);
-  
-  // B. CRITICAL FIX: Connect to Speakers (so you can hear it!)
-  // This effectively "unmutes" the tab by playing the stream through the extension.
-  source.connect(audioCtx.destination); 
+  source.connect(audioCtx.destination); // Play audio to speakers
 
-  // 5. Setup Canvas for Pixel Reading
   canvas = new OffscreenCanvas(100, 100);
   ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-  // 6. Start Analysis Loop
-  analysisInterval = setInterval(analyzeCurrentFrame, 500);
+  // Run analysis every 200ms (5 FPS) for better beat detection
+  analysisInterval = setInterval(analyzeCurrentFrame, 200);
 }
 
 function analyzeCurrentFrame() {
   if (!videoElement || videoElement.readyState < 2) return;
 
-  // A. Draw Video Frame to Canvas
+  const now = Date.now();
+
+  // -----------------------
+  // 1. VISUAL ANALYSIS
+  // -----------------------
   ctx.drawImage(videoElement, 0, 0, 100, 100);
   const frameData = ctx.getImageData(0, 0, 100, 100).data;
 
-  // B. Calculate Saturation
+  // Saturation
   let totalSaturation = 0;
   let pixels = 0;
   for (let i = 0; i < frameData.length; i += 40) { 
@@ -107,7 +105,7 @@ function analyzeCurrentFrame() {
   }
   const avgSaturation = pixels > 0 ? totalSaturation / pixels : 0;
 
-  // C. Calculate Motion
+  // Motion & Scene Cuts
   let motionScore = 0;
   if (previousPixelData) {
     let diffSum = 0;
@@ -118,26 +116,87 @@ function analyzeCurrentFrame() {
       diffSum += (rDiff + gDiff + bDiff) / 3;
     }
     motionScore = (diffSum / pixels) / 255;
+
+    // SCENE CUT DETECTOR
+    if (motionScore > CUT_THRESHOLD && (now - lastCutTime > CUT_COOLDOWN)) {
+      cutTimestamps.push(now);
+      lastCutTime = now;
+      console.log("✂️ SCENE CUT DETECTED");
+    }
   }
   previousPixelData = Uint8ClampedArray.from(frameData);
 
-  // D. Calculate Loudness
+  // -----------------------
+  // 2. AUDIO ANALYSIS (BPM)
+  // -----------------------
   let volume = 0;
+  let bpm = 0;
+  
   if (analyser) {
     const dataArray = new Uint8Array(analyser.frequencyBinCount);
     analyser.getByteFrequencyData(dataArray);
+    
+    // Calculate Volume (RMS-ish)
     const sum = dataArray.reduce((a, b) => a + b, 0);
     volume = sum / dataArray.length;
+
+    // BEAT DETECTOR (Bass Kick Strategy)
+    // Sum the lowest 10 bins (Bass Frequencies)
+    let bassEnergy = 0;
+    for(let i=0; i<10; i++) bassEnergy += dataArray[i];
+    bassEnergy = bassEnergy / 10;
+
+    if (bassEnergy > BEAT_THRESHOLD && (now - lastBeatTime > BEAT_COOLDOWN)) {
+      beatTimestamps.push(now);
+      lastBeatTime = now;
+    }
   }
 
-  // E. Send Data
+  // -----------------------
+  // 3. AGGREGATE STATS (Rolling Window)
+  // -----------------------
+  // Remove timestamps older than 60 seconds
+  cutTimestamps = cutTimestamps.filter(t => now - t < 60000);
+  beatTimestamps = beatTimestamps.filter(t => now - t < 60000);
+
+  const cutsPerMinute = cutTimestamps.length;
+  const detectedBPM = beatTimestamps.length;
+
+  // Send Data
   chrome.runtime.sendMessage({
     type: "METRICS_UPDATE",
     data: {
       saturation: avgSaturation,
       motion: motionScore,
       loudness: volume,
-      timestamp: Date.now()
+      cutsPerMinute: cutsPerMinute,
+      bpm: detectedBPM,
+      timestamp: now
     }
   });
+
+  // --- AI SNAPSHOT LOGIC ---
+  // Run semantic analysis every 5 seconds or on scene cut
+  let shouldAnalyze = false;
+  if (now - lastAiCheck > 5000) {
+    shouldAnalyze = true;
+  }
+  // If a scene cut just happened, force analysis
+  if (motionScore > CUT_THRESHOLD && (now - lastCutTime < 300)) {
+    shouldAnalyze = true;
+  }
+  if (shouldAnalyze) {
+    lastAiCheck = now;
+    canvas.convertToBlob({ type: "image/jpeg", quality: 0.5 }).then(blob => {
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      reader.onloadend = () => {
+        const base64data = reader.result;
+        chrome.runtime.sendMessage({
+          type: 'ANALYZE_SEMANTIC',
+          data: { image: base64data }
+        });
+      };
+    });
+  }
 }
