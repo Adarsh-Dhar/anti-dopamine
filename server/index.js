@@ -36,6 +36,26 @@ const backendKeypair = Keypair.fromSecretKey(bs58.decode(secretKeyString));
 
 // 1. SLASH: User -> Treasury (Admin signs as Delegate)
 async function slashUser(userPublicKeyString, amount) {
+    const userPublicKey = new PublicKey(userPublicKeyString);
+    const userTokenAccount = await getAssociatedTokenAddress(USDC_MINT, userPublicKey);
+    const treasuryTokenAccount = await getAssociatedTokenAddress(USDC_MINT, backendKeypair.publicKey);
+    // Debug: print backend public key
+    console.log('Backend public key:', backendKeypair.publicKey.toBase58());
+    console.log('User public key:', userPublicKey.toBase58());
+    console.log('User token account:', userTokenAccount.toBase58());
+    // Fetch and log user's token account info
+    const accountInfo = await connection.getParsedAccountInfo(userTokenAccount);
+    if (accountInfo.value && accountInfo.value.data && accountInfo.value.data.parsed) {
+      const info = accountInfo.value.data.parsed.info;
+      const delegate = info.delegate;
+      const delegatedAmount = info.delegatedAmount;
+      const tokenBalance = info.tokenAmount && info.tokenAmount.uiAmountString;
+      console.log('User token account delegate:', delegate);
+      console.log('User token account delegated amount:', delegatedAmount);
+      console.log('User token account balance:', tokenBalance);
+    } else {
+      console.log('Could not fetch user token account info or parse delegate.');
+    }
   try {
     const userPublicKey = new PublicKey(userPublicKeyString);
     const userTokenAccount = await getAssociatedTokenAddress(USDC_MINT, userPublicKey);
@@ -48,14 +68,16 @@ async function slashUser(userPublicKeyString, amount) {
       userTokenAccount,      // From: User
       USDC_MINT,
       treasuryTokenAccount,  // To: Treasury
-      userPublicKey,         // Owner: User
+      userPublicKey,         // Owner: User (not delegate)
       amountBigInt,
       decimals,
-      [backendKeypair],      // Signer: Admin (Delegate)
+      [],                    // No signers for instruction
       TOKEN_PROGRAM_ID
     );
 
     const transaction = new Transaction().add(instruction);
+    transaction.feePayer = backendKeypair.publicKey;
+    transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
     const signature = await sendAndConfirmTransaction(connection, transaction, [backendKeypair]);
     console.log(`🔪 SLASHED ${amount} USDC. Tx: ${signature}`);
     return { signature };

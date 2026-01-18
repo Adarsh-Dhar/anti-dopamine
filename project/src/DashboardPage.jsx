@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import './App.css';
 
 // Backend public key (should match the backend's .env)
-const BACKEND_PUBLIC_KEY = '6Qw2Qw6Qw6Qw6Qw6Qw6Qw6Qw6Qw6Qw6Qw6Qw6Qw6Qw6Qw6Qw6Qw6Qw6Qw6Qw6Qw6Qw6Qw6Qw6Qw'; // <-- Replace with actual backend public key
+const BACKEND_PUBLIC_KEY = 'EYSHit3n1e6qQWKG6L4g34SNoG6P7R9U7y6MGREBLebB'; // <-- Replace with actual backend public key
 
 // Now receives all data via props!
 function DashboardPage({ walletAddress, score, metrics, finance, navigateTo }) {
@@ -88,7 +88,8 @@ function DashboardPage({ walletAddress, score, metrics, finance, navigateTo }) {
       if (contentType && contentType.includes('application/json')) {
         const data = await res.json();
         if (data.success) {
-          alert('Deposit successful! Tx: ' + data.tx);
+          const txSig = data.tx && data.tx.signature ? data.tx.signature : JSON.stringify(data.tx);
+          alert('Deposit successful! Tx: ' + txSig);
         } else {
           alert('Deposit failed: ' + (data.error || 'Unknown error'));
         }
@@ -165,7 +166,7 @@ function DashboardPage({ walletAddress, score, metrics, finance, navigateTo }) {
           💸 Deposit 0.001 USDC
         </button>
         <button onClick={handleWithdraw}>
-          💸 Withdraw 0.001 USDC
+          💸 Backend Withdraw (Delegate, No User Signature)
         </button>
       </div>
 

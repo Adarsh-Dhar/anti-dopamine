@@ -22,7 +22,7 @@ export const useDopamineStaking = () => {
         publicKey
       );
       const decimals = 6; 
-      const amountInSmallestUnit = amount * Math.pow(10, decimals);
+      const amountInSmallestUnit = Math.floor(Number(amount) * Math.pow(10, decimals));
       const instruction = createApproveInstruction(
         userTokenAccount,
         BACKEND_WALLET,
