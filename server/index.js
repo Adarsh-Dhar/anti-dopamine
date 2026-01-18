@@ -28,9 +28,9 @@ const secretKeyString = process.env.BACKEND_PRIVATE_KEY;
 if (!secretKeyString) throw new Error('BACKEND_PRIVATE_KEY not set');
 const backendKeypair = Keypair.fromSecretKey(bs58.decode(secretKeyString));
 
-// --- GEMINI SETUP ---
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+// --- GEMINI SETUP (DISABLED) ---
+// const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 // --- SOLANA FUNCTIONS ---
 
@@ -133,33 +133,20 @@ app.post('/api/refund', async (req, res) => {
   }
 });
 
+
+// Dummy AI analysis endpoint (no Gemini)
 app.post('/api/analyze-frame', async (req, res) => {
   try {
-    // FIX 1: Extract imageBase64 from the request body
-    const { imageBase64 } = req.body; 
-    
+    const { imageBase64 } = req.body;
     if (!imageBase64) {
       return res.status(400).json({ success: false, error: "No image provided" });
     }
-   
-    // Clean string
-    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
-    
-    const prompt = "Analyze this video frame. Rate it from 0-100 for 'Dopamine Intensity' or 'Brainrot'. Return JSON: { \"score\": number }.";
-    
-    const result = await model.generateContent([
-      prompt, 
-      { inlineData: { data: base64Data, mimeType: "image/jpeg" } }
-    ]);
-    
-    const text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
-    const data = JSON.parse(text);
-    
-    res.json({ success: true, data });
-
+    // Return a dummy score between 0 and 100
+    const dummyScore = Math.floor(Math.random() * 101);
+    res.json({ success: true, data: { score: dummyScore } });
   } catch (e) {
-     console.error("AI Analysis Error:", e);
-     res.status(500).json({ success: false, error: e.message });
+    console.error("AI Analysis Error:", e);
+    res.status(500).json({ success: false, error: e.message });
   }
 });
 

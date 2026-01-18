@@ -1,10 +1,11 @@
 // project/background.js
 
-// --- CONSTANTS ---
+// --- CONFIGURATION ---
 const DECAY_RATE = 2.0;       
 const GROWTH_MULTIPLIER = 0.5; 
 const MAX_SCORE = 10000;       
-const SYNC_THRESHOLD = 0.0001; 
+const POINTS_PER_STEP = 100;   // Granularity: Move money every 100 points
+const SYNC_THRESHOLD = 0.000001; // Tiny threshold to handle floating point math
 
 // --- STATE ---
 let currentBrainrot = 0;
@@ -43,7 +44,7 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
   if (message.type === 'WALLET_CONNECTED') {
     walletPublicKey = message.publicKey;
     chrome.storage.local.set({ walletPublicKey, isConnected: true });
-    // Send back current state immediately for instant sync
+    // Send back sync state instantly
     sendResponse({ 
       success: true, 
       syncState: { totalAllowance, cumulativeSlashed, currentBrainrot } 
@@ -60,17 +61,17 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
 });
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.type === 'METRICS_UPDATE') processMetrics(msg.data);
-  if (msg.type === 'START_TRACKING') {
-    handleStartTracking(msg.tabId)
-      .then(() => sendResponse({ success: true }))
-      .catch((e) => sendResponse({ success: false, error: e?.message || String(e) }));
-    return true; // Indicate async response
-  }
-  if (msg.type === 'ANALYZE_SEMANTIC') handleSemanticAnalysis(msg.data.image);
+  let handled = false;
+  if (msg.type === 'METRICS_UPDATE') { processMetrics(msg.data); handled = true; }
+  if (msg.type === 'START_TRACKING') { handleStartTracking(msg.tabId); handled = true; }
+  if (msg.type === 'ANALYZE_SEMANTIC') { handleSemanticAnalysis(msg.data.image); handled = true; }
+  // Always send a response to avoid port closed error
+  if (handled) sendResponse({ success: true });
+  else sendResponse();
+  return false; // not async
 });
 
-// --- CORE LOGIC (With Sync) ---
+// --- CORE LOGIC ---
 function processMetrics(data) {
   const now = Date.now();
   const timeDelta = (now - lastUpdate) / 1000; 
@@ -93,14 +94,13 @@ function processMetrics(data) {
   const formattedScore = parseFloat(currentBrainrot.toFixed(2));
   chrome.storage.local.set({ brainrotScore: formattedScore });
   
-  // 1. Update Extension Popup
+  // 1. Update Popup
   chrome.runtime.sendMessage({
     type: 'SCORE_UPDATE',
     data: { score: formattedScore, instantParams: data }
   }).catch(() => {});
 
-  // 2. BROADCAST TO WEB APP (Localhost)
-  // This pushes the state to your dashboard every second
+  // 2. Sync to Web App
   const fullSyncState = {
     score: formattedScore,
     metrics: data,
@@ -124,29 +124,45 @@ function processMetrics(data) {
   reconcileFinances(formattedScore);
 }
 
-// --- FINANCE LOGIC ---
+// --- NEW "STEP" FINANCE LOGIC ---
 let isTransacting = false; 
+
 async function reconcileFinances(score) {
   if (!walletPublicKey || totalAllowance <= 0 || isTransacting) return;
 
-  const targetLocked = totalAllowance * (score / MAX_SCORE);
+  // 1. Determine which "Step" we are on (0 to 100)
+  const currentStep = Math.floor(score / POINTS_PER_STEP);
+  const totalSteps = MAX_SCORE / POINTS_PER_STEP; // 100 steps
+
+  // 2. Calculate Target Locked Amount based on Step
+  // Formula: (CurrentStep / 100) * TotalAllowance
+  const targetLocked = (currentStep / totalSteps) * totalAllowance;
+
+  // 3. Calculate Delta (Difference from what we already took)
   const delta = targetLocked - cumulativeSlashed;
 
+  // 4. Filter out tiny floating point noises
+  // We ONLY act if the delta is significant (meaning we changed a full step)
+  // For 0.1 USDC allowance, one step is 0.001. We check if delta is close to that.
   if (Math.abs(delta) < SYNC_THRESHOLD) return;
 
-  isTransacting = true; 
+  isTransacting = true; // Lock
+
   try {
     if (delta > 0) {
-      console.log(`[Finance] Slashing ${delta.toFixed(4)} USDC`);
+      // SLASH (Score increased to next 100-point bracket)
+      console.log(`[Finance] Step Up! Slashing ${delta.toFixed(6)} USDC`);
       await fetch('http://localhost:3001/api/slash', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userPublicKey: walletPublicKey, amount: delta })
       });
       cumulativeSlashed += delta;
+
     } else {
+      // REFUND (Score dropped to lower 100-point bracket)
       const refundAmount = Math.abs(delta);
-      console.log(`[Finance] Refunding ${refundAmount.toFixed(4)} USDC`);
+      console.log(`[Finance] Step Down! Refunding ${refundAmount.toFixed(6)} USDC`);
       await fetch('http://localhost:3001/api/refund', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -154,15 +170,17 @@ async function reconcileFinances(score) {
       });
       cumulativeSlashed -= refundAmount;
     }
+
+    // Save accurate state
     chrome.storage.local.set({ cumulativeSlashed });
+
   } catch (e) {
     console.error("[Finance] Transaction Failed:", e);
   } finally {
-    isTransacting = false; 
+    isTransacting = false; // Unlock
   }
 }
 
-// --- HELPERS ---
 async function handleStartTracking(tabId) {
     try {
         await ensureOffscreen();
