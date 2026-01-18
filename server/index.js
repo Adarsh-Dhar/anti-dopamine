@@ -58,9 +58,16 @@ async function slashUser(userPublicKeyString, amount) {
     const transaction = new Transaction().add(instruction);
     const signature = await sendAndConfirmTransaction(connection, transaction, [backendKeypair]);
     console.log(`🔪 SLASHED ${amount} USDC. Tx: ${signature}`);
-    return signature;
+    return { signature };
   } catch (error) {
-    console.error("Slash failed:", error.message);
+    let logs = null;
+    if (error.logs) {
+      logs = error.logs;
+    } else if (error.getLogs) {
+      try { logs = await error.getLogs(); } catch { logs = null; }
+    }
+    console.error("Slash failed:", error.message, logs ? `\nLogs:\n${logs.join('\n')}` : '');
+    error.logs = logs;
     throw error;
   }
 }
@@ -89,14 +96,22 @@ async function refundUser(userPublicKeyString, amount) {
     const transaction = new Transaction().add(instruction);
     const signature = await sendAndConfirmTransaction(connection, transaction, [backendKeypair]);
     console.log(`💸 REFUNDED ${amount} USDC. Tx: ${signature}`);
-    return signature;
+    return { signature };
   } catch (error) {
-    console.error("Refund failed:", error.message);
+    let logs = null;
+    if (error.logs) {
+      logs = error.logs;
+    } else if (error.getLogs) {
+      try { logs = await error.getLogs(); } catch { logs = null; }
+    }
+    console.error("Refund failed:", error.message, logs ? `\nLogs:\n${logs.join('\n')}` : '');
+    error.logs = logs;
     throw error;
   }
 }
 
 // --- API ROUTES ---
+
 
 app.post('/api/slash', async (req, res) => {
   const { userPublicKey, amount } = req.body;
@@ -104,7 +119,7 @@ app.post('/api/slash', async (req, res) => {
     const tx = await slashUser(userPublicKey, amount);
     res.json({ success: true, tx, type: 'slash' });
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
+    res.status(500).json({ success: false, error: e.message, logs: e.logs });
   }
 });
 
@@ -114,7 +129,7 @@ app.post('/api/refund', async (req, res) => {
     const tx = await refundUser(userPublicKey, amount);
     res.json({ success: true, tx, type: 'refund' });
   } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
+    res.status(500).json({ success: false, error: e.message, logs: e.logs });
   }
 });
 

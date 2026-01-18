@@ -1,136 +1,104 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import LoginPage from './LoginPage';
 import DashboardPage from './DashboardPage';
 import AccountPage from './AccountPage';
-import Setup from './Setup';
+import Setup from './Setup'; 
 import './App.css';
 
 function App() {
-  const [walletAddress, setWalletAddress] = useState(null);
   const [currentPage, setCurrentPage] = useState('login');
-  const [brainrotScore, setBrainrotScore] = useState(0.00);
-  const [metrics, setMetrics] = useState({ saturation: 0, motion: 0 });
+  
+  // GLOBAL STATE (Synced with Extension)
+  const [globalState, setGlobalState] = useState({
+    score: 0,
+    metrics: { saturation: 0, motion: 0, loudness: 0 },
+    finance: { allowance: 0, slashed: 0, remaining: 0 },
+    wallet: null
+  });
 
   useEffect(() => {
-    // Only run extension logic if chrome.storage exists
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      // 1. INITIAL CHECK: Look in storage when popup opens
-      chrome.storage.local.get(['walletPublicKey', 'brainrotScore'], (result) => {
-        if (result.walletPublicKey) {
-          setWalletAddress(result.walletPublicKey);
+    // 1. Initial Load: Check if we have wallet in extension storage
+    if (window.chrome && window.chrome.storage) {
+      window.chrome.storage.local.get(['walletPublicKey'], (res) => {
+        if (res.walletPublicKey) {
+          setGlobalState(prev => ({ ...prev, wallet: res.walletPublicKey }));
           setCurrentPage('dashboard');
         }
-        if (result.brainrotScore) {
-          setBrainrotScore(result.brainrotScore);
-        }
       });
+    }
 
-      // 2. LIVE LISTENER: Wait for Background Script to save the wallet
-      const storageListener = (changes, namespace) => {
-        if (namespace === 'local' && changes.walletPublicKey) {
-          const newAddress = changes.walletPublicKey.newValue;
-          if (newAddress) {
-            setWalletAddress(newAddress);
-            setCurrentPage('dashboard');
-          }
+    // 2. Listen for EXTENSION_SYNC (web app) and SCORE_UPDATE (popup)
+    const handleSyncMessage = (event) => {
+      if (event.data?.type === 'ANTI_DOPAMINE_SYNC') {
+        const syncedData = event.data.data;
+        setGlobalState({
+          score: syncedData.score,
+          metrics: syncedData.metrics,
+          finance: syncedData.finance,
+          wallet: syncedData.wallet
+        });
+        if (syncedData.wallet && currentPage === 'login') {
+          setCurrentPage('dashboard');
         }
-        if (namespace === 'local' && changes.brainrotScore) {
-          setBrainrotScore(changes.brainrotScore.newValue);
-        }
-      };
-      chrome.storage.onChanged.addListener(storageListener);
+      }
+    };
+    window.addEventListener('message', handleSyncMessage);
 
-      // 3. Listen for live updates from Background (SCORE_UPDATE)
-      const messageListener = (msg) => {
+    // Listen for SCORE_UPDATE from background (popup only)
+    let removeRuntimeListener = null;
+    if (window.chrome && window.chrome.runtime && window.chrome.runtime.onMessage) {
+      const runtimeListener = (msg) => {
         if (msg.type === 'SCORE_UPDATE') {
-          setBrainrotScore(msg.data.score);
-          setMetrics(msg.data.instantParams);
+          setGlobalState(prev => ({
+            ...prev,
+            score: msg.data.score,
+            metrics: msg.data.instantParams,
+            // finance and wallet remain unchanged unless you want to sync them too
+          }));
         }
       };
-      chrome.runtime.onMessage.addListener(messageListener);
-
-      // Cleanup listeners on unmount
-      return () => {
-        chrome.storage.onChanged.removeListener(storageListener);
-        chrome.runtime.onMessage.removeListener(messageListener);
-      };
+      window.chrome.runtime.onMessage.addListener(runtimeListener);
+      removeRuntimeListener = () => window.chrome.runtime.onMessage.removeListener(runtimeListener);
     }
-    // If not in extension context, do nothing
-    return undefined;
-  }, []);
 
-  const navigateTo = (page) => {
-    setCurrentPage(page);
-  };
+    return () => {
+      window.removeEventListener('message', handleSyncMessage);
+      if (removeRuntimeListener) removeRuntimeListener();
+    };
+  }, [currentPage]);
 
-  const handleDisconnect = () => {
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.remove(['walletPublicKey', 'isConnected'], () => {
-        setWalletAddress(null);
-        setCurrentPage('login');
-      });
-    } else {
-      setWalletAddress(null);
-      setCurrentPage('login');
-    }
-  };
+  const navigateTo = (page) => setCurrentPage(page);
 
   return (
-    <BrowserRouter>
-      <div className="app-container">
-        {/* HEADER */}
-        <header className="app-header">
-          <div className="logo">Anti-Dopamine</div>
-          {walletAddress && (
-            <div className="user-icon" onClick={() => navigateTo('account')}>
-              👤
-            </div>
-          )}
-        </header>
-        {/* BRAINROT SCORE DISPLAY */}
-        <div className="score-display" style={{ textAlign: 'center', margin: '20px 0' }}>
-          <h2>Brainrot Level</h2>
-          <div style={{ fontSize: '3.5em', fontWeight: 'bold', color: brainrotScore > 50 ? '#ff4444' : '#4caf50' }}>
-            {Number(brainrotScore).toFixed(2)}
-          </div>
-          <p>SATURATION: {(metrics.saturation * 100).toFixed(0)}%</p>
-        </div>
-        {/* ROUTING */}
-        <main className="app-content">
-          <Routes>
-            <Route path="/" element={
-              currentPage === 'login' ? (
-                <LoginPage onConnect={(addr) => {
-                  setWalletAddress(addr);
-                  setCurrentPage('dashboard');
-                }} />
-              ) : currentPage === 'dashboard' ? (
-                <DashboardPage 
-                  walletAddress={walletAddress} 
-                  navigateTo={navigateTo}
-                />
-              ) : (
-                <AccountPage 
-                  walletAddress={walletAddress} 
-                  onDisconnect={handleDisconnect}
-                  onBack={() => navigateTo('dashboard')}
-                />
-              )
-            } />
-            <Route path="/login" element={
-              <LoginPage onConnect={(addr) => {
-                setWalletAddress(addr);
-                setCurrentPage('dashboard');
-              }} />
-            } />
-            <Route path="/setup" element={<Setup />} />
-            {/* Catch-all route to redirect unknown paths to root */}
-            <Route path="*" element={<DashboardPage walletAddress={walletAddress} navigateTo={navigateTo} />} />
-          </Routes>
-        </main>
-      </div>
-    </BrowserRouter>
+    <div className="app-container">
+      {currentPage === 'login' && (
+        <LoginPage 
+          onConnect={() => setCurrentPage('dashboard')} 
+        />
+      )}
+      
+      {currentPage === 'dashboard' && (
+        <DashboardPage 
+          // PASS GLOBAL STATE DOWN
+          walletAddress={globalState.wallet}
+          score={globalState.score}
+          metrics={globalState.metrics}
+          finance={globalState.finance}
+          navigateTo={navigateTo}
+        />
+      )}
+      
+      {currentPage === 'account' && (
+        <AccountPage 
+          walletAddress={globalState.wallet} 
+          onBack={() => navigateTo('dashboard')}
+        />
+      )}
+
+      {currentPage === 'setup' && (
+         <Setup onBack={() => navigateTo('dashboard')} />
+      )}
+    </div>
   );
 }
 

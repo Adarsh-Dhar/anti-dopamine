@@ -1,14 +1,23 @@
 
 import React, { useState } from "react";
 import { useDopamineStaking } from "./Web3Manager";
+import { useWallet } from '@solana/wallet-adapter-react';
+import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import '@solana/wallet-adapter-react-ui/styles.css';
+
 
 function Setup() {
 	const { giveAllowance } = useDopamineStaking();
+	const { publicKey } = useWallet();
 	const [amount, setAmount] = useState(1);
 	const [status, setStatus] = useState("");
 	const [loading, setLoading] = useState(false);
 
 	const handleAllowance = async () => {
+		if (!publicKey) {
+			setStatus("❌ Please connect your wallet first.");
+			return;
+		}
 		setLoading(true);
 		setStatus("");
 		try {
@@ -29,10 +38,6 @@ function Setup() {
 				}, (response) => {
 					// Optionally handle response
 				});
-			} else {
-				// In web-only context, skip extension logic
-				// Optionally, you can log or mock here for development
-				// console.log('Skipping extension message: not in Chrome extension context');
 			}
 		} catch (e) {
 			setStatus("❌ Error: " + (e?.message || e));
@@ -44,6 +49,7 @@ function Setup() {
 	return (
 		<div style={{ padding: 32, minHeight: 400, minWidth: 320, fontFamily: 'sans-serif' }}>
 			<h2>Setup Allowance</h2>
+			<WalletMultiButton style={{ marginBottom: 20 }} />
 			<label style={{ display: 'block', marginBottom: 12 }}>
 				USDC Amount to Allow:
 				<input
@@ -63,6 +69,7 @@ function Setup() {
 				{loading ? 'Setting...' : 'Set Allowance'}
 			</button>
 			{status && <div style={{ marginTop: 20, fontWeight: 'bold', color: status.startsWith('✅') ? 'green' : 'red' }}>{status}</div>}
+			{!publicKey && <div style={{ marginTop: 16, color: 'red', fontWeight: 'bold' }}>Wallet not connected.</div>}
 		</div>
 	);
 }

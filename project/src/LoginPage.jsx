@@ -55,7 +55,7 @@ function LoginPage() {
   return (
     <div className="login-page" style={{ 
       display: 'flex', flexDirection: 'column', alignItems: 'center', 
-      justifyContent: 'center', height: '100%', padding: '20px', minHeight: '600px', minWidth:"360px"
+      justifyContent: 'center', height: '100%', padding: '20px', minHeight: '600px', minWidth: '360px', width: '100%'
     }}>
       <h2 style={{ marginBottom: 30 }}>Login</h2>
 

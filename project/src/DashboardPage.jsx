@@ -1,169 +1,111 @@
+import React from 'react';
+import './App.css';
 
-import React, { useState, useEffect } from "react";
-import { useDopamineStaking } from "./Web3Manager";
-
-
-
-function DashboardPage() {
-  const [metrics, setMetrics] = useState({ saturation: 0, motion: 0, loudness: 0 });
-  const [semanticScore, setSemanticScore] = useState(null);
-  const { giveAllowance, revokeAllowance, depositUSDC, withdrawUSDC } = useDopamineStaking();
-  const [txStatus, setTxStatus] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const handleDeposit = async () => {
-    setLoading(true);
-    setTxStatus("");
-    try {
-      const signature = await depositUSDC(0.001);
-      if (typeof signature === 'string' && signature.length > 0) {
-        setTxStatus({
-          success: true,
-          type: 'deposit',
-          signature
-        });
-      } else {
-        setTxStatus({ success: false, message: "Deposit failed: No signature returned." });
-      }
-    } catch (e) {
-      setTxStatus({ success: false, message: "Deposit failed: " + (e?.message || "Unknown error") });
-    }
-    setLoading(false);
-  };
-
-  const handleWithdraw = async () => {
-    setLoading(true);
-    setTxStatus("");
-    try {
-      const signature = await withdrawUSDC(0.001);
-      if (typeof signature === 'string' && signature.length > 0) {
-        setTxStatus({
-          success: true,
-          type: 'withdraw',
-          signature
-        });
-      } else {
-        setTxStatus({ success: false, message: "Withdraw failed: No signature returned." });
-      }
-    } catch (e) {
-      setTxStatus({ success: false, message: "Withdraw failed: " + (e?.message || "Unknown error") });
-    }
-    setLoading(false);
-  };
-  const [allowanceConfirmed, setAllowanceConfirmed] = useState(false);
-
-  const startTracking = async () => {
-    if (window.chrome && window.chrome.tabs && window.chrome.tabs.query) {
-      const tabs = await window.chrome.tabs.query({ active: true, currentWindow: true });
-      const tab = tabs[0];
-      if (tab && tab.id) {
-        window.chrome.runtime.sendMessage({ type: 'START_TRACKING', tabId: tab.id });
-      }
-    }
-  };
-
-  useEffect(() => {
-    // Listen for metrics updates
-    const listener = (msg) => {
-      if (msg && msg.type === "METRICS_UPDATE") {
-        setMetrics(msg.data);
-      }
-    };
-    if (window.chrome && window.chrome.runtime && window.chrome.runtime.onMessage && window.chrome.runtime.onMessage.addListener) {
-      window.chrome.runtime.onMessage.addListener(listener);
-    }
-    // Listen for semanticScore changes in chrome.storage
-    let storageListener;
-    if (window.chrome && window.chrome.storage && window.chrome.storage.onChanged) {
-      storageListener = (changes, area) => {
-        if (area === 'local' && changes.semanticScore) {
-          setSemanticScore(changes.semanticScore.newValue);
-        }
-      };
-      window.chrome.storage.onChanged.addListener(storageListener);
-    }
-    // Initial load for allowanceConfirmed and semanticScore
-    if (window.chrome && window.chrome.storage && window.chrome.storage.local) {
-      window.chrome.storage.local.get(['allowanceConfirmed', 'semanticScore'], (result) => {
-        if (result.allowanceConfirmed) {
-          setAllowanceConfirmed(true);
-          window.chrome.storage.local.remove(['allowanceConfirmed']);
-        }
-        if (result.semanticScore !== undefined) {
-          setSemanticScore(result.semanticScore);
+// Now receives all data via props!
+function DashboardPage({ walletAddress, score, metrics, finance, navigateTo }) {
+  
+  // Start Tracking Logic (Sends message to Extension)
+  const handleStartTracking = () => {
+    // If running in extension popup, send message to background to start tracking
+    if (window.chrome && window.chrome.runtime && window.chrome.tabs) {
+      // Query the active tab in the current window
+      window.chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const activeTab = tabs && tabs[0];
+        if (activeTab && activeTab.id) {
+          // Send message to background to start tracking this tab
+          window.chrome.runtime.sendMessage({ type: 'START_TRACKING', tabId: activeTab.id }, (response) => {
+            if (response && response.success) {
+              // Optionally show a success message
+            } else {
+              // Optionally show an error message
+            }
+          });
+        } else {
+          alert('No active tab found.');
         }
       });
+    } else {
+      // Not in extension context (e.g., web app)
+      alert("Please use the Extension Popup to start tracking a specific tab!");
     }
-    return () => {
-      if (window.chrome && window.chrome.runtime && window.chrome.runtime.onMessage && window.chrome.runtime.onMessage.removeListener) {
-        window.chrome.runtime.onMessage.removeListener(listener);
+  };
+
+  // Withdraw handler
+  const handleWithdraw = async () => {
+    if (!walletAddress) {
+      alert('Wallet not connected.');
+      return;
+    }
+    try {
+      const res = await fetch('http://localhost:3001/api/refund', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userPublicKey: walletAddress, amount: 0.001 })
+      });
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data.success) {
+          alert('Withdrawal successful! Tx: ' + data.tx);
+        } else {
+          alert('Withdrawal failed: ' + (data.error || 'Unknown error'));
+        }
+      } else {
+        const text = await res.text();
+        alert('Withdrawal error: Unexpected response from server.\n' + text);
       }
-      if (window.chrome && window.chrome.storage && window.chrome.storage.onChanged && storageListener) {
-        window.chrome.storage.onChanged.removeListener(storageListener);
-      }
-    };
-  }, []);
+    } catch (e) {
+      alert('Withdrawal error: ' + (e.message || e));
+    }
+  };
+
   return (
-    <div style={{ padding: 20, minHeight: '600px', minWidth: '360px', fontFamily: 'sans-serif' }}>
-      <h2>Dashboard</h2>
-      {allowanceConfirmed && (
-        <div style={{ background: '#e6ffe6', color: '#1a7f1a', padding: 12, borderRadius: 6, marginBottom: 16, fontWeight: 'bold', textAlign: 'center' }}>
-          ✅ Allowance set successfully!
+    <div className="dashboard">
+      <div className="score-section">
+        <h2>Brainrot Level</h2>
+        <div 
+          className="score-value"
+          style={{ color: score > 500 ? '#ff4444' : '#4caf50' }}
+        >
+          {score.toFixed(2)}
         </div>
-      )}
-      <button
-        onClick={startTracking}
-        style={{ padding: '10px 20px', background: '#1a7f1a', color: 'white', border: 'none', borderRadius: 5, cursor: 'pointer', marginBottom: 12, marginRight: 10 }}
-      >
-        ▶️ Start Tracking
-      </button>
-      <button
-        onClick={() => window.open('http://localhost:5173/setup', '_blank')}
-        style={{ padding: '10px 20px', background: '#646cff', color: 'white', border: 'none', borderRadius: 5, cursor: 'pointer', marginBottom: 16 }}
-      >
-        Setup Allowance
-      </button>
-      <div style={{ marginBottom: 16 }}>
-        <button
-          onClick={handleDeposit}
-          disabled={loading}
-          style={{ padding: '10px 20px', background: '#ffb347', color: 'black', border: 'none', borderRadius: 5, cursor: loading ? 'not-allowed' : 'pointer', marginRight: 10 }}
-        >
-          {loading ? 'Processing...' : 'Deposit 0.001 USDC'}
+        
+        <div className="finance-stats" style={{marginTop: '10px', fontSize: '0.9em'}}>
+           <p>💸 Slashed: {finance.slashed.toFixed(4)} USDC</p>
+           <p>🛡️ Remaining: {finance.remaining.toFixed(4)} USDC</p>
+        </div>
+      </div>
+
+      <div className="actions">
+        <button onClick={handleStartTracking}>
+          ▶️ Start Tracking (Use Popup)
         </button>
-        <button
-          onClick={handleWithdraw}
-          disabled={loading}
-          style={{ padding: '10px 20px', background: '#ff6464', color: 'white', border: 'none', borderRadius: 5, cursor: loading ? 'not-allowed' : 'pointer' }}
-        >
-          {loading ? 'Processing...' : 'Withdraw 0.001 USDC'}
+        <button onClick={() => window.open('http://localhost:5173/setup', '_blank')}>
+          ⚙️ Setup Allowance
+        </button>
+        <button onClick={handleWithdraw}>
+          💸 Withdraw 0.001 USDC
         </button>
       </div>
-      {txStatus && (
-        <div style={{ marginBottom: 16, textAlign: 'center', fontWeight: 'bold' }}>
-          {txStatus.success ? (
-            <span>
-              ✅ {txStatus.type === 'deposit' ? 'Deposit' : 'Withdraw'} successful!<br />
-              <a
-                href={`https://explorer.solana.com/tx/${txStatus.signature}?cluster=devnet`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ color: '#1a7f1a', wordBreak: 'break-all' }}
-              >
-                View Transaction: {txStatus.signature}
-              </a>
-            </span>
-          ) : (
-            <span style={{ color: '#d32f2f' }}>❌ {txStatus.message}</span>
-          )}
+
+      <div className="live-metrics">
+        <h3>Live Metrics (Synced)</h3>
+        <div className="metric-row">
+          <span>🎨 Saturation:</span>
+          <span>{(metrics.saturation * 100).toFixed(0)}%</span>
         </div>
-      )}
-      <div style={{ marginTop: 20, background: '#f5f5f5', padding: 15, borderRadius: 10 }}>
-        <h3>Live Metrics</h3>
-        <p>Saturation: <strong>{(metrics.saturation * 100).toFixed(0)}%</strong></p>
-        <p>Motion: <strong>{(metrics.motion * 100).toFixed(0)}%</strong></p>
-        <p>Loudness: <strong>{metrics.loudness.toFixed(0)}</strong></p>
-        <p>Brainrot Score: <strong>{semanticScore !== null ? semanticScore : '...'}</strong></p>
+        <div className="metric-row">
+          <span>🏃 Motion:</span>
+          <span>{(metrics.motion * 100).toFixed(0)}%</span>
+        </div>
+        <div className="metric-row">
+          <span>🔊 Loudness:</span>
+          <span>{metrics.loudness.toFixed(0)}</span>
+        </div>
+        <div className="metric-row">
+          <span>✂️ Cuts/Min:</span>
+          <span>{metrics.cutsPerMinute || 0}</span>
+        </div>
       </div>
     </div>
   );
