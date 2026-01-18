@@ -152,10 +152,9 @@ function DashboardPage({ walletAddress, score, metrics, finance, navigateTo }) {
           <b>Backend USDC Delegate Address:</b><br />
           <span style={{ wordBreak: 'break-all' }}>{BACKEND_PUBLIC_KEY}</span>
         </div>
-        <button onClick={handleApproveDelegate} disabled={delegating} style={{ marginBottom: 8 }}>
-          {delegating ? 'Approving...' : 'Approve Backend as USDC Delegate'}
+        <button onClick={() => window.open('http://localhost:5173/delegate', '_blank')} style={{ marginBottom: 8 }}>
+          Approve Backend as USDC Delegate
         </button>
-        {delegateStatus && <div style={{ fontSize: 13, color: delegateStatus.startsWith('Delegate approved') ? 'green' : 'red', marginBottom: 8 }}>{delegateStatus}</div>}
         <button onClick={handleStartTracking}>
           ▶️ Start Tracking (Use Popup)
         </button>

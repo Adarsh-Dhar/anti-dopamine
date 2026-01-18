@@ -2,11 +2,23 @@ import React, { useState, useEffect } from 'react';
 import LoginPage from './LoginPage';
 import DashboardPage from './DashboardPage';
 import AccountPage from './AccountPage';
-import Setup from './Setup'; 
+import Setup from './Setup';
+import DelegatePage from './DelegatePage';
 import './App.css';
 
 function App() {
-  const [currentPage, setCurrentPage] = useState('login');
+  // Sync currentPage with URL path on initial load
+  const getInitialPage = () => {
+    const path = (typeof window !== 'undefined' && window.location && window.location.pathname) ? window.location.pathname : '';
+    if (typeof path === 'string') {
+      if (path.includes('delegate')) return 'delegate';
+      if (path.includes('dashboard')) return 'dashboard';
+      if (path.includes('account')) return 'account';
+      if (path.includes('setup')) return 'setup';
+    }
+    return 'login';
+  };
+  const [currentPage, setCurrentPage] = useState(getInitialPage());
   
   // GLOBAL STATE (Synced with Extension)
   const [globalState, setGlobalState] = useState({
@@ -16,6 +28,8 @@ function App() {
     wallet: null
   });
 
+  // Add navigateTo function for page navigation
+  const navigateTo = (page) => setCurrentPage(page);
   useEffect(() => {
     // 1. Initial Load: Check if we have wallet in extension storage
     if (window.chrome && window.chrome.storage) {
@@ -61,13 +75,7 @@ function App() {
       removeRuntimeListener = () => window.chrome.runtime.onMessage.removeListener(runtimeListener);
     }
 
-    return () => {
-      window.removeEventListener('message', handleSyncMessage);
-      if (removeRuntimeListener) removeRuntimeListener();
-    };
-  }, [currentPage]);
-
-  const navigateTo = (page) => setCurrentPage(page);
+  });
 
   return (
     <div className="app-container">
@@ -76,10 +84,8 @@ function App() {
           onConnect={() => setCurrentPage('dashboard')} 
         />
       )}
-      
       {currentPage === 'dashboard' && (
         <DashboardPage 
-          // PASS GLOBAL STATE DOWN
           walletAddress={globalState.wallet}
           score={globalState.score}
           metrics={globalState.metrics}
@@ -87,17 +93,18 @@ function App() {
           navigateTo={navigateTo}
         />
       )}
-      
       {currentPage === 'account' && (
         <AccountPage 
           walletAddress={globalState.wallet} 
           onBack={() => navigateTo('dashboard')}
         />
       )}
-
-      {currentPage === 'setup' && (
+       {currentPage === 'setup' && (
          <Setup onBack={() => navigateTo('dashboard')} />
-      )}
+       )}
+       {currentPage === 'delegate' && (
+         <DelegatePage />
+       )}
     </div>
   );
 }
