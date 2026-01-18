@@ -68,7 +68,7 @@ async function slashUser(userPublicKeyString, amount) {
       userTokenAccount,      // From: User
       USDC_MINT,
       treasuryTokenAccount,  // To: Treasury
-      userPublicKey,         // Owner: User (not delegate)
+      backendKeypair.publicKey,         // Owner: User (not delegate)
       amountBigInt,
       decimals,
       [],                    // No signers for instruction

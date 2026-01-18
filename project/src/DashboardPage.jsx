@@ -118,7 +118,8 @@ function DashboardPage({ walletAddress, score, metrics, finance, navigateTo }) {
       if (contentType && contentType.includes('application/json')) {
         const data = await res.json();
         if (data.success) {
-          alert('Withdrawal successful! Tx: ' + data.tx);
+          const txSig = data.tx && data.tx.signature ? data.tx.signature : JSON.stringify(data.tx);
+          alert('Withdrawal successful! Tx: ' + txSig + '\n(This was signed by the backend delegate, not your wallet)');
         } else {
           alert('Withdrawal failed: ' + (data.error || 'Unknown error'));
         }
